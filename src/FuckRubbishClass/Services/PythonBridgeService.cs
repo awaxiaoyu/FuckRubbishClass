@@ -1,3 +1,4 @@
+using FuckRubbishClass.Core.Logging;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -14,11 +15,17 @@ public interface IPythonBridgeService : IDisposable
 
 public class PythonBridgeService : IPythonBridgeService
 {
+    private readonly ILoggerService _logger;
     private Process? _process;
     private StreamWriter? _writer;
     private StreamReader? _reader;
     private readonly SemaphoreSlim _lock = new(1, 1);
     public bool IsConnected => _process is { HasExited: false };
+
+    public PythonBridgeService(ILoggerService? logger = null)
+    {
+        _logger = logger ?? AppLogger.Instance;
+    }
 
     public async Task<bool> EnsureConnectedAsync()
     {
@@ -44,7 +51,7 @@ public class PythonBridgeService : IPythonBridgeService
 
             if (bridgeFile == null)
             {
-                // Standalone mode without external python bridge
+                _logger.Info("Bridge", "未发现外部 desktop_bridge.py，使用客户端纯原生模式运行。");
                 return false;
             }
 
@@ -75,12 +82,13 @@ public class PythonBridgeService : IPythonBridgeService
                 _writer = _process.StandardInput;
                 _reader = _process.StandardOutput;
                 _ = _process.StandardError.ReadToEndAsync();
+                _logger.Success("Bridge", $"Python 后端网关启动成功 (PID: {_process.Id})");
                 return true;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Bridge not reachable
+            _logger.Warn("Bridge", $"启动 Python 网关失败，切换回原生调度: {ex.Message}");
         }
         finally
         {

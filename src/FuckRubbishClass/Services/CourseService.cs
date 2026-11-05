@@ -1,3 +1,5 @@
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -16,10 +18,16 @@ public interface ICourseService
 public class CourseService : ICourseService
 {
     private readonly string _filePath;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
+
     public ObservableCollection<CourseModel> Courses { get; } = new();
 
-    public CourseService(string? dataDir = null)
+    public CourseService(string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
     {
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
         var dir = dataDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         Directory.CreateDirectory(dir);
         _filePath = Path.Combine(dir, "courses.json");
@@ -211,12 +219,16 @@ public class CourseService : ICourseService
 
     public async Task RefreshCoursesForAccountAsync(string accountId)
     {
+        _logger.Info("课程同步", $"正在为账号 [{accountId}] 刷新课程进度与测验列表…");
         await Task.Delay(1200); // Simulate sync
         // Update timestamp or progress
         foreach (var c in Courses.Where(x => x.AccountId == accountId))
         {
             c.ProgressPercent = Math.Min(100.0, c.ProgressPercent + 5.0);
+            _eventBus.Publish(new CourseProgressUpdatedEvent(c.CourseId, c.ProgressPercent));
         }
         await SaveCoursesAsync();
+        _logger.Success("课程同步", $"账号 [{accountId}] 课程同步完毕。");
+        _eventBus.Publish(new CoursesRefreshedEvent(Courses.Count, accountId));
     }
 }

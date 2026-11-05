@@ -22,12 +22,31 @@
 3. **跨平台统一功能接入工作台（Unified Feature Workspace）**
 4. **统一课程库与批量任务下发（Course & Task Hub）**
 5. **实时任务流水线与终端控制台监控（Task & Log Terminal Monitor）**
+6. **全局统一日志系统与异步持久化落盘（Global Logging System）**
+7. **全局弱引用统一事件总线（Global Unified Event Bus）**
 
 ---
 
 ## 🌟 核心特性与架构设计
 
-### 1. 统一模型配置与智能调度中心（AI Engine & Dispatcher）
+### 1. 全局统一日志系统（Global Logging System）
+- **多 Sink 协同架构**：
+  - **内存响应式 UI Sink**：线程安全派发到 WPF UI 队列（`ObservableCollection<LogEntry>`），支持日志级别彩色标签与自动容量滚动截断（防止长时间运行内存膨胀）；
+  - **异步高性能文件持久化 Sink**：独立的后台无锁缓冲队列与写入线程，自动按日轮转生成磁盘文件（`logs/app-yyyy-MM-dd.log`），进程退出时自动清空缓冲区，绝不阻塞 UI 渲染与网络主流程；
+  - **诊断跟踪 Sink**：自动同步输出至 `System.Diagnostics.Trace` 与 `Debug` 窗口。
+- **全方位静态与 DI 双支持**：提供全局静态入口 `AppLogger.Info(...)`、`AppLogger.Warn(...)`、`AppLogger.Error(ex, ...)`，支持在任意 ViewModel、服务、静态工具类或转换器中单行调用；
+- **终端控制台交互**：提供日志分类过滤、一键复制到剪贴板、清空以及导出全量日志文件功能。
+
+### 2. 全局统一事件总线系统（Global Unified Event Bus）
+- **强类型领域事件解耦**：
+  - `AccountEvents`：`AccountLoggedInEvent`、`AccountStateChangedEvent`、`PrimaryAccountChangedEvent`、`AccountDeletedEvent`；
+  - `TaskEvents`：`TaskJobStartedEvent`、`TaskJobProgressEvent`、`TaskJobCompletedEvent`、`TaskJobCancelledEvent`；
+  - `ModelSchedulerEvents`：`ModelInvocationStartedEvent`、`ModelInvocationCompletedEvent`、`ModelFallbackTriggeredEvent`、`ModelHealthTestedEvent`；
+  - `SystemEvents`：`NavigationRequestedEvent`（跨模块解耦导航）、`NotificationEvent`（全局气泡消息提示）、`ConfigSavedEvent`。
+- **弱引用安全订阅**：基于 `CommunityToolkit.Mvvm` 的弱引用消息机制封装，订阅者生命周期随控件销毁自然释放，彻底避免传统 .NET 事件强引用导致的内存泄漏；
+- **自动 UI Dispatcher 调度**：后台工作线程发布的事件在进入订阅者回调前，由总线统一安全切回 UI 主线程执行，无需各 ViewModel 反复手工编写 `Dispatcher.Invoke`。
+
+### 3. 统一模型配置与智能调度中心（AI Engine & Dispatcher）
 彻底废除此前在各功能页面中分散填写的 API Key 和 Base URL，建立全局统一的 AI 模型池：
 - **主流厂商预设一键加载**：内置 DeepSeek（V3 / R1）、OpenAI（GPT-4o）、Moonshot（Kimi 课件解析）、硅基流动（SiliconFlow）、本地 Ollama 等多种预设；
 - **全网连通性与延迟测速（Ping）**：支持一键对所有模型节点发起真实 HTTP 请求，毫秒级呈现节点可用性与响应延迟；
@@ -99,6 +118,16 @@ FuckRubbishClass/
         ├── FuckRubbishClass.csproj    # .NET 8.0-windows WPF 项目工程
         ├── App.xaml / App.xaml.cs     # 应用程序入口、Fluent UI 主题加载
         ├── MainWindow.xaml / .cs      # 主窗口（FluentWindow、Mica 底色、导航侧栏）
+        ├── Core/
+        │   ├── Logging/
+        │   │   ├── ILoggerService.cs      # 全局统一日志服务接口
+        │   │   ├── LoggerService.cs       # 异步落盘、内存滚动与 UI 派发多 Sink 实现
+        │   │   └── AppLogger.cs           # 全局静态日志便捷门面
+        │   └── Events/
+        │       ├── IEventBus.cs           # 全局统一事件总线接口
+        │       ├── EventBus.cs            # 基于 WeakReferenceMessenger 的弱引用总线实现
+        │       ├── AppEventBus.cs         # 全局静态事件总线便捷门面
+        │       └── DomainEvents.cs        # 账号、课程、任务、模型调度领域事件定义
         ├── Styles/
         │   └── FluentStyles.xaml      # 现代卡片、阴影、层级与排版样式字典
         ├── Converters/
@@ -173,6 +202,8 @@ dotnet run --project src\FuckRubbishClass\FuckRubbishClass.csproj
 | **账号管理** | 无统一账号列表，Cookie 散落各处，单账号局限 | **跨平台账号卡片列表**，多账号随时切换主账号，独立会话刷新与扫码弹窗 |
 | **功能组织** | 按三个上游平台切选项卡，各选项卡功能互不相通 | **统一功能接入工作台**（视频自学 / 平时测试 / 考试中心 / 考勤签到 / AI智能课） |
 | **安全机制** | 测验可能误点交卷导致不可逆失分 | **分层保护机制**（本地题库 -> 答案图 -> AI 兜底 -> 默认草稿保存防误交卷） |
+| **日志系统** | 临时单文本框追加，易卡顿无落盘，各模块强行耦合 | **工业级全局统一日志系统**（内存UI队列滚动截断 + 后台独立线程异步落盘 `logs/` + 静态/DI双门面） |
+| **事件系统** | 各类回调交叉绑定，代码紧密耦合，极易产生内存泄漏 | **全局强类型弱引用事件总线**（领域事件驱动 + 自动 UI Dispatcher 派发 + 弱引用防泄漏） |
 | **考试模式** | 仅单一方面，风险不可控 | **提供 100% 安全只读 AI 辅助模式** 与全自动答题双模式选择 |
 | **代码架构** | 单一 1475 行 MainWindow.xaml.cs 耦合逻辑 | **严格标准 MVVM 架构**，依赖注入/服务解耦，高内聚低耦合 |
 

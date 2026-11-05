@@ -1,8 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using FuckRubbishClass.Services;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 
 namespace FuckRubbishClass.ViewModels;
@@ -10,9 +13,11 @@ namespace FuckRubbishClass.ViewModels;
 public partial class TaskMonitorViewModel : ViewModelBase
 {
     private readonly ITaskExecutionService _taskService;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
 
     public ObservableCollection<TaskJobModel> Jobs => _taskService.Jobs;
-    public ObservableCollection<LogEntry> AllLogs => _taskService.Logs;
+    public ObservableCollection<LogEntry> AllLogs => _logger.LiveLogs;
     public ObservableCollection<LogEntry> FilteredLogs { get; } = new();
 
     public TaskJobModel? CurrentRunningJob => _taskService.CurrentRunningJob;
@@ -26,13 +31,35 @@ public partial class TaskMonitorViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoScroll = true;
 
-    public TaskMonitorViewModel(ITaskExecutionService taskService)
+    [ObservableProperty]
+    private string _currentLogFilePath = string.Empty;
+
+    public TaskMonitorViewModel(
+        ITaskExecutionService taskService,
+        ILoggerService? logger = null,
+        IEventBus? eventBus = null)
     {
         _taskService = taskService;
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
         SelectedJob = _taskService.Jobs.FirstOrDefault();
+        CurrentLogFilePath = _logger.GetCurrentLogFilePath();
 
         RefreshFilteredLogs();
-        _taskService.Logs.CollectionChanged += (_, _) => RefreshFilteredLogs();
+        AllLogs.CollectionChanged += (_, _) => RefreshFilteredLogs();
+
+        // 订阅全局任务事件
+        _eventBus.Subscribe<TaskJobStartedEvent>(this, e =>
+        {
+            SelectedJob = e.Job;
+            OnPropertyChanged(nameof(CurrentRunningJob));
+        });
+
+        _eventBus.Subscribe<TaskJobCompletedEvent>(this, e =>
+        {
+            OnPropertyChanged(nameof(CurrentRunningJob));
+        });
     }
 
     partial void OnSelectedLogLevelFilterChanged(string value) => RefreshFilteredLogs();
@@ -64,9 +91,9 @@ public partial class TaskMonitorViewModel : ViewModelBase
     [RelayCommand]
     private void ClearLogs()
     {
-        _taskService.ClearLogs();
+        _logger.Clear();
         RefreshFilteredLogs();
-        SuccessMessage = "日志已清空";
+        SuccessMessage = "实时日志控制台已清空";
     }
 
     [RelayCommand]
@@ -81,6 +108,21 @@ public partial class TaskMonitorViewModel : ViewModelBase
         catch (Exception ex)
         {
             ErrorMessage = $"复制失败: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportLogsToFileAsync()
+    {
+        try
+        {
+            var exportPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"exported_logs_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+            await _logger.ExportLogsAsync(exportPath);
+            SuccessMessage = $"日志成功导出至: {Path.GetFileName(exportPath)}";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"导出失败: {ex.Message}";
         }
     }
 }

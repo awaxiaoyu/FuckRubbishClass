@@ -1,3 +1,5 @@
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -20,11 +22,17 @@ public interface IAccountService
 public class AccountService : IAccountService
 {
     private readonly string _filePath;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
+
     public ObservableCollection<AccountModel> Accounts { get; } = new();
     public AccountModel? ActiveAccount { get; set; }
 
-    public AccountService(string? dataDir = null)
+    public AccountService(string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
     {
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
         var dir = dataDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         Directory.CreateDirectory(dir);
         _filePath = Path.Combine(dir, "accounts.json");
@@ -46,16 +54,16 @@ public class AccountService : IAccountService
                         Accounts.Add(acc);
                     }
                     ActiveAccount = Accounts.FirstOrDefault(x => x.IsPrimary) ?? Accounts.FirstOrDefault();
+                    _logger.Info("账号中心", $"已载入本地 {Accounts.Count} 个账号配置。");
                     return;
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to initial seeds
+            _logger.Warn("账号中心", $"读取账号文件失败，将载入初始预设: {ex.Message}");
         }
 
-        // Default initial presets to showcase the UI immediately
         SeedDefaultAccounts();
         await SaveAccountsAsync();
     }
@@ -112,9 +120,9 @@ public class AccountService : IAccountService
             var json = JsonSerializer.Serialize(Accounts.ToList(), new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(_filePath, json);
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore write failures in read-only environments
+            _logger.Error("账号中心", "保存账号配置失败", ex);
         }
     }
 
@@ -132,6 +140,10 @@ public class AccountService : IAccountService
         Accounts.Add(account);
         ActiveAccount = account;
         await SaveAccountsAsync();
+
+        _logger.Success("账号中心", $"已添加新账号 [{account.PlatformDisplayName}] {account.DisplayTitle}");
+        _eventBus.Publish(new AccountLoggedInEvent(account));
+        _eventBus.Publish(new PrimaryAccountChangedEvent(account));
     }
 
     public async Task DeleteAccountAsync(string accountId)
@@ -143,8 +155,15 @@ public class AccountService : IAccountService
             if (ActiveAccount?.Id == accountId)
             {
                 ActiveAccount = Accounts.FirstOrDefault();
+                if (ActiveAccount != null)
+                {
+                    _eventBus.Publish(new PrimaryAccountChangedEvent(ActiveAccount));
+                }
             }
             await SaveAccountsAsync();
+
+            _logger.Info("账号中心", $"已移除账号: {acc.DisplayTitle}");
+            _eventBus.Publish(new AccountDeletedEvent(accountId));
         }
     }
 
@@ -159,6 +178,9 @@ public class AccountService : IAccountService
             }
             ActiveAccount = target;
             await SaveAccountsAsync();
+
+            _logger.Info("账号中心", $"主账号变更为: [{target.PlatformDisplayName}] {target.DisplayTitle}");
+            _eventBus.Publish(new PrimaryAccountChangedEvent(target));
         }
     }
 
@@ -169,12 +191,16 @@ public class AccountService : IAccountService
 
         target.Status = AccountStatus.LoggingIn;
         target.StatusDescription = "检查会话状态中…";
+        _eventBus.Publish(new AccountStateChangedEvent(target, "正在刷新会话"));
 
         await Task.Delay(1000); // Simulate check
         target.Status = AccountStatus.Active;
         target.StatusDescription = $"会话正常 (刷新于 {DateTime.Now:HH:mm:ss})";
         target.LastActiveTime = DateTime.Now;
         await SaveAccountsAsync();
+
+        _logger.Success("账号中心", $"会话刷新成功: {target.DisplayTitle}");
+        _eventBus.Publish(new AccountStateChangedEvent(target, "会话正常"));
         return true;
     }
 }

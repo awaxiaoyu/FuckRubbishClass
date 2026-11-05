@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FuckRubbishClass.Core.Events;
 using FuckRubbishClass.Models;
 using FuckRubbishClass.Services;
 using System.Collections.ObjectModel;
@@ -12,6 +13,7 @@ public partial class DashboardViewModel : ViewModelBase
     private readonly ICourseService _courseService;
     private readonly IModelSchedulerService _schedulerService;
     private readonly ITaskExecutionService _taskService;
+    private readonly IEventBus _eventBus;
 
     public ObservableCollection<AccountModel> Accounts => _accountService.Accounts;
     public ObservableCollection<CourseModel> Courses => _courseService.Courses;
@@ -31,16 +33,25 @@ public partial class DashboardViewModel : ViewModelBase
         IAccountService accountService,
         ICourseService courseService,
         IModelSchedulerService schedulerService,
-        ITaskExecutionService taskService)
+        ITaskExecutionService taskService,
+        IEventBus? eventBus = null)
     {
         _accountService = accountService;
         _courseService = courseService;
         _schedulerService = schedulerService;
         _taskService = taskService;
+        _eventBus = eventBus ?? AppEventBus.Instance;
 
         _accountService.Accounts.CollectionChanged += (_, _) => UpdateMetrics();
         _courseService.Courses.CollectionChanged += (_, _) => UpdateMetrics();
         _schedulerService.Models.CollectionChanged += (_, _) => UpdateMetrics();
+
+        // 订阅全局事件
+        _eventBus.Subscribe<PrimaryAccountChangedEvent>(this, _ => UpdateMetrics());
+        _eventBus.Subscribe<AccountStateChangedEvent>(this, _ => UpdateMetrics());
+        _eventBus.Subscribe<TaskJobStartedEvent>(this, _ => UpdateMetrics());
+        _eventBus.Subscribe<TaskJobCompletedEvent>(this, _ => UpdateMetrics());
+        _eventBus.Subscribe<ModelHealthTestedEvent>(this, _ => UpdateMetrics());
     }
 
     private void UpdateMetrics()
@@ -57,6 +68,7 @@ public partial class DashboardViewModel : ViewModelBase
     private void NavigateTo(string pageKey)
     {
         RequestNavigate?.Invoke(pageKey);
+        _eventBus.Publish(new NavigationRequestedEvent(pageKey));
     }
 
     [RelayCommand]

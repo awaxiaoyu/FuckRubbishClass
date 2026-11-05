@@ -1,6 +1,7 @@
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using System.Collections.ObjectModel;
-using System.Windows;
 
 namespace FuckRubbishClass.Services;
 
@@ -9,6 +10,7 @@ public interface ITaskExecutionService
     ObservableCollection<TaskJobModel> Jobs { get; }
     ObservableCollection<LogEntry> Logs { get; }
     TaskJobModel? CurrentRunningJob { get; }
+    
     void Log(LogLevel level, string source, string message);
     void ClearLogs();
     Task StartJobAsync(TaskJobModel job, Func<CancellationToken, IProgress<double>, IProgress<string>, Task> work);
@@ -17,53 +19,37 @@ public interface ITaskExecutionService
 
 public class TaskExecutionService : ITaskExecutionService
 {
-    private readonly SynchronizationContext? _syncContext = SynchronizationContext.Current;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
     private CancellationTokenSource? _activeCts;
 
     public ObservableCollection<TaskJobModel> Jobs { get; } = new();
-    public ObservableCollection<LogEntry> Logs { get; } = new();
+    public ObservableCollection<LogEntry> Logs => _logger.LiveLogs;
     public TaskJobModel? CurrentRunningJob { get; private set; }
 
-    public TaskExecutionService()
+    public TaskExecutionService(ILoggerService? logger = null, IEventBus? eventBus = null)
     {
-        Log(LogLevel.Info, "系统", "FuckRubbishClass 现代化 Fluent 工作台已就绪。");
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
+        _logger.Info("任务引擎", "跨平台任务执行引擎已就绪。");
     }
 
     public void Log(LogLevel level, string source, string message)
     {
-        void Add()
-        {
-            Logs.Add(new LogEntry
-            {
-                Level = level,
-                Source = source,
-                Message = message
-            });
-            // Keep recent 1000 logs
-            if (Logs.Count > 1000) Logs.RemoveAt(0);
-        }
-
-        if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
-        {
-            Application.Current.Dispatcher.InvokeAsync(Add);
-        }
-        else
-        {
-            Add();
-        }
+        _logger.Log(level, source, message);
     }
 
     public void ClearLogs()
     {
-        Logs.Clear();
-        Log(LogLevel.Info, "系统", "日志控制台已清空。");
+        _logger.Clear();
     }
 
     public async Task StartJobAsync(TaskJobModel job, Func<CancellationToken, IProgress<double>, IProgress<string>, Task> work)
     {
         if (CurrentRunningJob != null && CurrentRunningJob.Status == TaskExecutionStatus.Running)
         {
-            Log(LogLevel.Warning, "调度", $"当前已有任务在执行：{CurrentRunningJob.Title}，请等待完成或手动终止。");
+            _logger.Warn("任务调度", $"当前已有任务在执行：{CurrentRunningJob.Title}，请等待完成或手动终止。");
             return;
         }
 
@@ -76,17 +62,20 @@ public class TaskExecutionService : ITaskExecutionService
 
         if (!Jobs.Contains(job)) Jobs.Insert(0, job);
 
-        Log(LogLevel.Info, "任务调度", $"🚀 开始执行任务 [{job.TypeDisplayName}] - {job.Title}");
+        _logger.Info("任务调度", $"🚀 开始执行任务 [{job.TypeDisplayName}] - {job.Title}");
+        _eventBus.Publish(new TaskJobStartedEvent(job));
 
         var progressGauge = new Progress<double>(p =>
         {
             job.ProgressPercent = p;
+            _eventBus.Publish(new TaskJobProgressEvent(job.Id, p, job.CurrentStep));
         });
 
         var stepReporter = new Progress<string>(s =>
         {
             job.CurrentStep = s;
-            Log(LogLevel.Info, job.TypeDisplayName, s);
+            _logger.Info(job.TypeDisplayName, s);
+            _eventBus.Publish(new TaskJobProgressEvent(job.Id, job.ProgressPercent, s));
         });
 
         try
@@ -95,19 +84,23 @@ public class TaskExecutionService : ITaskExecutionService
             job.Status = TaskExecutionStatus.Completed;
             job.ProgressPercent = 100;
             job.CurrentStep = "执行完成";
-            Log(LogLevel.Success, "任务调度", $"✅ 任务完成：{job.Title}");
+            _logger.Success("任务调度", $"✅ 任务完成：{job.Title}");
+            _eventBus.Publish(new TaskJobCompletedEvent(job, true));
         }
         catch (OperationCanceledException)
         {
             job.Status = TaskExecutionStatus.Cancelled;
             job.CurrentStep = "用户已取消";
-            Log(LogLevel.Warning, "任务调度", $"⏹ 任务已由用户手动停止：{job.Title}");
+            _logger.Warn("任务调度", $"⏹ 任务已由用户手动停止：{job.Title}");
+            _eventBus.Publish(new TaskJobCancelledEvent(job.Id));
+            _eventBus.Publish(new TaskJobCompletedEvent(job, false, "用户取消"));
         }
         catch (Exception ex)
         {
             job.Status = TaskExecutionStatus.Failed;
             job.CurrentStep = $"执行异常: {ex.Message}";
-            Log(LogLevel.Error, "任务调度", $"❌ 任务异常终止：{ex.Message}");
+            _logger.Error("任务调度", $"❌ 任务异常终止：{ex.Message}", ex);
+            _eventBus.Publish(new TaskJobCompletedEvent(job, false, ex.Message));
         }
         finally
         {
@@ -122,7 +115,7 @@ public class TaskExecutionService : ITaskExecutionService
         if (CurrentRunningJob?.Id == jobId)
         {
             _activeCts?.Cancel();
-            Log(LogLevel.Warning, "调度", "已发出任务终止指令…");
+            _logger.Warn("任务调度", "已发出任务终止指令…");
         }
         else
         {
@@ -130,6 +123,7 @@ public class TaskExecutionService : ITaskExecutionService
             if (job != null)
             {
                 job.Status = TaskExecutionStatus.Cancelled;
+                _eventBus.Publish(new TaskJobCancelledEvent(jobId));
             }
         }
     }

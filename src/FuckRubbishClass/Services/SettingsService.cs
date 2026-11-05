@@ -1,3 +1,5 @@
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using System.IO;
 using System.Text.Json;
@@ -19,6 +21,8 @@ public interface ISettingsService
 public class SettingsService : ISettingsService
 {
     private readonly string _filePath;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
 
     public AppSettings AppSettings { get; } = new();
     public VideoStudyConfig VideoConfig { get; } = new();
@@ -27,8 +31,11 @@ public class SettingsService : ISettingsService
     public AttendanceSignInConfig SignInConfig { get; } = new();
     public AiCourseConfig AiCourseConfig { get; } = new();
 
-    public SettingsService(string? dataDir = null)
+    public SettingsService(string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
     {
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
         var dir = dataDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         Directory.CreateDirectory(dir);
         _filePath = Path.Combine(dir, "unified_config.json");
@@ -135,10 +142,13 @@ public class SettingsService : ISettingsService
             };
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(_filePath, json);
+
+            _logger.Success("配置中心", "全局统一配置文件已更新 (unified_config.json)。");
+            _eventBus.Publish(new ConfigSavedEvent("unified"));
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore write failures in restricted environments
+            _logger.Error("配置中心", "保存统一配置失败", ex);
         }
     }
 }

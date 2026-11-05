@@ -26,6 +26,8 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:Button Content="导出日志文件" Icon="{ui:SymbolIcon Symbol=ArrowDownload24}" Command="{Binding ExportLogsToFileCommand}" 
+                           Margin="0,0,8,0" Padding="12,8" />
                 <ui:Button Content="复制日志" Icon="{ui:SymbolIcon Symbol=Copy24}" Command="{Binding CopyLogsToClipboardCommand}" 
                            Margin="0,0,8,0" Padding="12,8" />
                 <ui:Button Appearance="Danger" Content="清空控制台" Icon="{ui:SymbolIcon Symbol=Delete24}" Command="{Binding ClearLogsCommand}" 
@@ -111,6 +113,7 @@
                             <Ellipse Width="10" Height="10" Fill="#F59E0B" Margin="0,0,6,0" />
                             <Ellipse Width="10" Height="10" Fill="#10B981" Margin="0,0,14,0" />
                             <TextBlock Text="TERMINAL LOG CONSOLE" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" />
+                            <TextBlock Text="{Binding CurrentLogFilePath, StringFormat=' · 落盘日志: {0}'}" FontFamily="Consolas" FontSize="10" Foreground="#64748B" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="320" />
                         </StackPanel>
 
                         <!-- Log Filters -->

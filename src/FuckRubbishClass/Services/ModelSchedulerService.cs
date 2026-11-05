@@ -1,3 +1,5 @@
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -23,13 +25,18 @@ public interface IModelSchedulerService
 public class ModelSchedulerService : IModelSchedulerService
 {
     private readonly string _filePath;
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     public ObservableCollection<AiModelConfig> Models { get; } = new();
     public ModelSchedulerConfig SchedulerConfig { get; } = new();
 
-    public ModelSchedulerService(string? dataDir = null)
+    public ModelSchedulerService(string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
     {
+        _logger = logger ?? AppLogger.Instance;
+        _eventBus = eventBus ?? AppEventBus.Instance;
+
         var dir = dataDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         Directory.CreateDirectory(dir);
         _filePath = Path.Combine(dir, "models_scheduler.json");
@@ -282,6 +289,9 @@ public class ModelSchedulerService : IModelSchedulerService
                 model.IsHealthy = true;
                 model.StatusText = $"在线 ({model.LatencyMs}ms)";
                 await SaveConfigAsync();
+
+                _logger.Success("模型诊断", $"节点 [{model.Name}] 响应正常，延迟 {model.LatencyMs}ms");
+                _eventBus.Publish(new ModelHealthTestedEvent(model.Id, true, model.LatencyMs, model.StatusText));
                 return true;
             }
             else
@@ -289,6 +299,9 @@ public class ModelSchedulerService : IModelSchedulerService
                 model.IsHealthy = false;
                 model.StatusText = $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}";
                 await SaveConfigAsync();
+
+                _logger.Warn("模型诊断", $"节点 [{model.Name}] 返回非200状态: {model.StatusText}");
+                _eventBus.Publish(new ModelHealthTestedEvent(model.Id, false, model.LatencyMs, model.StatusText));
                 return false;
             }
         }
@@ -299,6 +312,9 @@ public class ModelSchedulerService : IModelSchedulerService
             model.IsHealthy = false;
             model.StatusText = $"连接失败: {ex.Message}";
             await SaveConfigAsync();
+
+            _logger.Error("模型诊断", $"节点 [{model.Name}] 连通测试失败", ex);
+            _eventBus.Publish(new ModelHealthTestedEvent(model.Id, false, model.LatencyMs, model.StatusText));
             return false;
         }
     }
@@ -315,7 +331,20 @@ public class ModelSchedulerService : IModelSchedulerService
         };
 
         var model = Models.FirstOrDefault(x => x.Id == targetId && x.IsEnabled);
-        if (model != null) return model;
+        if (model != null)
+        {
+            if (isFallback)
+            {
+                _logger.Warn("模型调度", $"已触发容灾降级！角色 [{role}] 当前路由至备选节点: {model.Name} ({model.ModelId})");
+                _eventBus.Publish(new ModelFallbackTriggeredEvent(role, targetId, model.Id, "自动降级备选节点"));
+            }
+            else
+            {
+                _logger.Info("模型调度", $"调度角色 [{role}] -> 节点 [{model.Name}]");
+                _eventBus.Publish(new ModelInvocationStartedEvent(model.Id, role, $"角色调度: {role}"));
+            }
+            return model;
+        }
 
         // Auto fallback to any available healthy model
         if (role == ModelRole.Vision)

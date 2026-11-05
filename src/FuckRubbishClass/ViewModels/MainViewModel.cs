@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FuckRubbishClass.Core.Events;
+using FuckRubbishClass.Core.Logging;
 using FuckRubbishClass.Models;
 using FuckRubbishClass.Services;
 
@@ -7,6 +9,8 @@ namespace FuckRubbishClass.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
+    private readonly ILoggerService _logger;
+    private readonly IEventBus _eventBus;
     private readonly IAccountService _accountService;
     private readonly ICourseService _courseService;
     private readonly IModelSchedulerService _schedulerService;
@@ -45,29 +49,73 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
-        // Setup Services
-        _accountService = new AccountService();
-        _courseService = new CourseService();
-        _schedulerService = new ModelSchedulerService();
-        _settingsService = new SettingsService();
-        _taskService = new TaskExecutionService();
-        _bridgeService = new PythonBridgeService();
+        // 1. 初始化全局基础设施 (Logger & EventBus)
+        _logger = AppLogger.Instance;
+        _eventBus = AppEventBus.Instance;
 
-        // Setup ViewModels
-        DashboardVM = new DashboardViewModel(_accountService, _courseService, _schedulerService, _taskService);
+        // 2. 初始化服务层
+        _accountService = new AccountService(logger: _logger, eventBus: _eventBus);
+        _courseService = new CourseService(logger: _logger, eventBus: _eventBus);
+        _schedulerService = new ModelSchedulerService(logger: _logger, eventBus: _eventBus);
+        _settingsService = new SettingsService(logger: _logger, eventBus: _eventBus);
+        _taskService = new TaskExecutionService(_logger, _eventBus);
+        _bridgeService = new PythonBridgeService(_logger);
+
+        // 3. 初始化 ViewModels
+        DashboardVM = new DashboardViewModel(_accountService, _courseService, _schedulerService, _taskService, _eventBus);
         AccountsVM = new AccountsViewModel(_accountService, _taskService);
         CourseHubVM = new CourseHubViewModel(_courseService, _taskService, _accountService);
         FeaturesVM = new FeaturesViewModel(_settingsService, _taskService, _accountService, _courseService, _schedulerService);
         ModelCenterVM = new ModelCenterViewModel(_schedulerService, _taskService);
-        TaskMonitorVM = new TaskMonitorViewModel(_taskService);
+        TaskMonitorVM = new TaskMonitorViewModel(_taskService, _logger, _eventBus);
         SettingsVM = new SettingsViewModel(_settingsService, _taskService);
 
         _currentViewModel = DashboardVM;
 
-        DashboardVM.RequestNavigate = key => Navigate(key);
+        // 4. 注册全局事件订阅
+        SubscribeGlobalEvents();
+    }
 
-        _taskService.Jobs.CollectionChanged += (_, _) => UpdateStatus();
-        _accountService.Accounts.CollectionChanged += (_, _) => UpdateStatus();
+    private void SubscribeGlobalEvents()
+    {
+        // 账号变更事件
+        _eventBus.Subscribe<PrimaryAccountChangedEvent>(this, e =>
+        {
+            ActiveAccountSummary = $"{e.Account.DisplayTitle} ({e.Account.PlatformDisplayName})";
+        });
+
+        _eventBus.Subscribe<AccountStateChangedEvent>(this, e =>
+        {
+            if (_accountService.ActiveAccount?.Id == e.Account.Id)
+            {
+                ActiveAccountSummary = $"{e.Account.DisplayTitle} ({e.Account.PlatformDisplayName}) · {e.Account.StatusText}";
+            }
+        });
+
+        // 任务状态与进度事件
+        _eventBus.Subscribe<TaskJobStartedEvent>(this, e =>
+        {
+            HasActiveTask = true;
+            TaskStatusSummary = $"运行中: {e.Job.Title} (0%)";
+        });
+
+        _eventBus.Subscribe<TaskJobProgressEvent>(this, e =>
+        {
+            HasActiveTask = true;
+            TaskStatusSummary = $"运行中: {e.CurrentStep} ({e.Progress:F0}%)";
+        });
+
+        _eventBus.Subscribe<TaskJobCompletedEvent>(this, e =>
+        {
+            HasActiveTask = false;
+            TaskStatusSummary = e.IsSuccess ? $"已完成: {e.Job.Title}" : $"已终止: {e.Job.Title}";
+        });
+
+        // 页面跳转请求事件
+        _eventBus.Subscribe<NavigationRequestedEvent>(this, e =>
+        {
+            Navigate(e.PageKey);
+        });
     }
 
     public async Task InitializeAsync()
@@ -85,11 +133,11 @@ public partial class MainViewModel : ViewModelBase
             var bridgeConnected = await _bridgeService.EnsureConnectedAsync();
             BridgeStatusText = bridgeConnected ? "Python Bridge: 在线" : "本地原生模式";
 
-            _taskService.Log(LogLevel.Success, "系统", "FuckRubbishClass 工作台加载完毕，所有服务就绪。");
+            _logger.Success("系统", "FuckRubbishClass 工作台加载完毕，所有服务与事件总线就绪。");
         }
         catch (Exception ex)
         {
-            _taskService.Log(LogLevel.Error, "初始化", $"初始化失败: {ex.Message}");
+            _logger.Error("初始化", $"初始化失败: {ex.Message}", ex);
         }
         finally
         {
