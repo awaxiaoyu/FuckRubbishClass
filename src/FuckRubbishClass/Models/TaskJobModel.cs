@@ -17,7 +17,13 @@ public partial class TaskJobModel : ObservableObject
     private PlatformType _platform = PlatformType.Zhihuishu;
 
     [ObservableProperty]
+    private string _accountId = string.Empty;
+
+    [ObservableProperty]
     private string _accountName = string.Empty;
+
+    [ObservableProperty]
+    private string _courseId = string.Empty;
 
     [ObservableProperty]
     private string _courseName = string.Empty;
@@ -37,6 +43,15 @@ public partial class TaskJobModel : ObservableObject
     [ObservableProperty]
     private string _durationText = "00:00";
 
+    [ObservableProperty]
+    private string _workerThreadTag = "Worker-1";
+
+    [ObservableProperty]
+    private double _playbackSpeed = 1.0;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
     public string TypeDisplayName => Type switch
     {
         FeatureType.VideoStudy => "视频自学",
@@ -45,6 +60,14 @@ public partial class TaskJobModel : ObservableObject
         FeatureType.AttendanceSignIn => "签到监控",
         FeatureType.AiCourse => "AI 智能课",
         _ => "日常任务"
+    };
+
+    public string PlatformDisplayName => Platform switch
+    {
+        PlatformType.Zhihuishu => "知到",
+        PlatformType.Chaoxing => "超星",
+        PlatformType.Ketangpai => "课堂派",
+        _ => "通用"
     };
 
     public string StatusBadgeColor => Status switch
@@ -56,6 +79,8 @@ public partial class TaskJobModel : ObservableObject
         TaskExecutionStatus.Cancelled => "#64748B",
         _ => "#94A3B8"
     };
+
+    public bool IsRunning => Status == TaskExecutionStatus.Running;
 }
 
 public partial class LogEntry : ObservableObject

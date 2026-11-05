@@ -51,49 +51,153 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left: Task Jobs Queue -->
+            <!-- Left: Concurrent Multi-Thread Workers Panel -->
             <Border Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource FluentCardStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="任务队列与历史" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,12" />
+                    <!-- Header & Concurrency Badge -->
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="并发任务执行看板" Style="{StaticResource SectionTitleStyle}" FontSize="15" />
+                            <TextBlock Text="多账号/多平台独立线程并行刷课" FontSize="11" Foreground="#64748B" Margin="0,2,0,0" />
+                        </StackPanel>
 
-                    <ListBox Grid.Row="1" ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}"
-                             BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Padding="12,10" Margin="0,0,0,6" CornerRadius="10" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
+                        <Border HorizontalAlignment="Right" Padding="8,3" CornerRadius="6" Background="#EFF6FF">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="6" Height="6" Fill="#2563EB" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding RunningJobs.Count, StringFormat='{}活跃: {0}'}" FontSize="11" FontWeight="Bold" Foreground="#1E3A8A" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
 
-                                        <!-- Title & Status Badge -->
-                                        <Grid Grid.Row="0" Margin="0,0,0,6">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#0F172A"
-                                                       TextTrimming="CharacterEllipsis" Width="200" HorizontalAlignment="Left" />
-                                            <Border HorizontalAlignment="Right" Padding="6,2" CornerRadius="4" Background="{Binding StatusBadgeColor}">
-                                                <TextBlock Text="{Binding Status}" FontSize="10" FontWeight="Bold" Foreground="White" />
-                                            </Border>
-                                        </Grid>
+                    <!-- Queue summary indicators -->
+                    <Grid Grid.Row="1" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                                        <!-- Step info -->
-                                        <TextBlock Grid.Row="1" Text="{Binding CurrentStep}" FontSize="11" Foreground="#64748B" TextTrimming="CharacterEllipsis" Margin="0,0,0,8" />
+                        <Border Background="#F8FAFC" Padding="6,4" CornerRadius="6" Margin="0,0,4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="运行中" FontSize="9" Foreground="#64748B" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding RunningJobs.Count}" FontWeight="Bold" FontSize="13" Foreground="#2563EB" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
 
-                                        <!-- Progress Bar & Actions -->
-                                        <Grid Grid.Row="2">
-                                            <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="4" Foreground="#2563EB" Background="#E2E8F0" />
-                                        </Grid>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                        <Border Grid.Column="1" Background="#F8FAFC" Padding="6,4" CornerRadius="6" Margin="2,0,2,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="排队等待" FontSize="9" Foreground="#64748B" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding PendingJobs.Count}" FontWeight="Bold" FontSize="13" Foreground="#D97706" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Background="#F8FAFC" Padding="6,4" CornerRadius="6" Margin="4,0,0,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="已完成" FontSize="9" Foreground="#64748B" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding FinishedJobs.Count}" FontWeight="Bold" FontSize="13" Foreground="#10B981" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Running & Pending Scrollable List -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <!-- Section: Active Running Workers -->
+                            <TextBlock Text="正在并发执行的工作单元" FontSize="11" FontWeight="SemiBold" Foreground="#475569" Margin="0,4,0,6" />
+                            <ItemsControl ItemsSource="{Binding RunningJobs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="12,10" Margin="0,0,0,8" CornerRadius="10" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <!-- Top: Worker Tag & Platform & Account -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Border Padding="4,1" CornerRadius="4" Background="#2563EB" Margin="0,0,6,0">
+                                                            <TextBlock Text="{Binding WorkerThreadTag}" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                                        </Border>
+                                                        <Border Padding="4,1" CornerRadius="4" Background="#E0E7FF" Margin="0,0,6,0">
+                                                            <TextBlock Text="{Binding PlatformDisplayName}" FontSize="9" FontWeight="SemiBold" Foreground="#3730A3" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding AccountName}" FontSize="11" FontWeight="SemiBold" Foreground="#1E3A8A" TextTrimming="CharacterEllipsis" MaxWidth="110" />
+                                                    </StackPanel>
+
+                                                    <ui:Button HorizontalAlignment="Right" Appearance="Danger" Icon="{ui:SymbolIcon Symbol=Dismiss24}" Padding="4,2"
+                                                               Command="{Binding DataContext.CancelJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                               CommandParameter="{Binding}" />
+                                                </Grid>
+
+                                                <!-- Course Title & Step -->
+                                                <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                                    <TextBlock Text="{Binding CourseName}" FontWeight="SemiBold" FontSize="12" Foreground="#0F172A" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding CurrentStep}" FontSize="11" Foreground="#475569" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                                </StackPanel>
+
+                                                <!-- Progress Gauge -->
+                                                <Grid Grid.Row="2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="5" Foreground="#2563EB" Background="#DBEAFE" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding ProgressPercent, StringFormat='{}{0:F0}%'}" FontSize="10" FontWeight="Bold" Foreground="#2563EB" Margin="6,0,0,0" />
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Section: Queued Tasks -->
+                            <TextBlock Text="等待执行队列" FontSize="11" FontWeight="SemiBold" Foreground="#64748B" Margin="0,8,0,6"
+                                       Visibility="{Binding PendingJobs.Count, Converter={StaticResource BoolToVisConverter}}" />
+                            <ItemsControl ItemsSource="{Binding PendingJobs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="10,8" Margin="0,0,0,6" CornerRadius="8" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Border Padding="4,1" CornerRadius="3" Background="#FEF3C7" Margin="0,0,6,0">
+                                                            <TextBlock Text="排队中" FontSize="9" FontWeight="Bold" Foreground="#B45309" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding AccountName, StringFormat='{}[{0}]'}" FontSize="10" Foreground="#64748B" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding CourseName}" FontSize="11" Foreground="#334155" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                                </StackPanel>
+
+                                                <ui:Button Grid.Column="1" Content="移出" Padding="6,2" FontSize="10"
+                                                           Command="{Binding DataContext.CancelJobCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Bottom Batch Control -->
+                    <Border Grid.Row="3" Margin="0,10,0,0" Padding="0,8,0,0" BorderBrush="#F1F5F9" BorderThickness="0,1,0,0">
+                        <ui:Button Appearance="Danger" Content="终止全部并发任务" Icon="{ui:SymbolIcon Symbol=Stop24}" HorizontalAlignment="Stretch"
+                                   Command="{Binding CancelAllJobsCommand}" Padding="10,7" />
+                    </Border>
                 </Grid>
             </Border>
 

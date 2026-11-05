@@ -118,33 +118,46 @@ public partial class CourseHubViewModel : ViewModelBase
             return;
         }
 
-        var job = new TaskJobModel
-        {
-            Title = $"批量视频自学 ({targets.Count} 门课)",
-            Type = FeatureType.VideoStudy,
-            Platform = targets.First().Platform,
-            CourseName = string.Join(", ", targets.Take(2).Select(x => x.Name)) + (targets.Count > 2 ? $" 等{targets.Count}门" : "")
-        };
+        SuccessMessage = $"已并发调度 {targets.Count} 门课程自学任务，正在并发启动多线程 Worker…";
+        _taskService.Log(LogLevel.Info, "并发调度", $"🚀 批量下发 {targets.Count} 门多平台/多账号并发自学任务！");
 
-        await _taskService.StartJobAsync(job, async (token, progress, step) =>
+        // 为每门选中的课程创建独立的任务作业，支持多平台多账号同时并行
+        var jobs = targets.Select(c => new TaskJobModel
         {
-            for (int i = 0; i < targets.Count; i++)
+            Title = $"自学: {c.Name}",
+            Type = FeatureType.VideoStudy,
+            Platform = c.Platform,
+            AccountId = c.AccountId,
+            AccountName = string.IsNullOrWhiteSpace(c.AccountDisplayName) ? "默认账号" : c.AccountDisplayName,
+            CourseId = c.CourseId,
+            CourseName = c.Name
+        }).ToList();
+
+        await _taskService.EnqueueBatchJobsAsync(jobs, async (job, token, progress, step) =>
+        {
+            var targetCourse = DisplayCourses.FirstOrDefault(x => x.CourseId == job.CourseId) ?? 
+                               AllCourses.FirstOrDefault(x => x.CourseId == job.CourseId);
+
+            step.Report($"连接平台 [{job.PlatformDisplayName}]，账号 [{job.AccountName}] 正在建立播放流…");
+            await Task.Delay(1000, token);
+            progress.Report(10);
+
+            step.Report($"[{job.AccountName}] 进入《{job.CourseName}》视频章节，正在多线程并发自学播放中…");
+            for (int p = 15; p <= 95; p += 15)
             {
                 token.ThrowIfCancellationRequested();
-                var c = targets[i];
-                step.Report($"正在自学《{c.Name}》 (第 {i + 1}/{targets.Count} 门)…");
+                await Task.Delay(600, token);
+                progress.Report(p);
 
-                for (int p = 0; p <= 100; p += 20)
+                if (targetCourse != null)
                 {
-                    token.ThrowIfCancellationRequested();
-                    await Task.Delay(400, token);
-                    var totalP = ((double)i / targets.Count * 100) + (p / (double)targets.Count);
-                    progress.Report(totalP);
+                    targetCourse.ProgressPercent = Math.Min(100.0, targetCourse.ProgressPercent + 3.0);
                 }
-
-                c.ProgressPercent = 100.0;
-                step.Report($"《{c.Name}》学习完成！");
             }
+
+            if (targetCourse != null) targetCourse.ProgressPercent = 100.0;
+            progress.Report(100);
+            step.Report($"《{job.CourseName}》视频小节达标，该课程本阶段任务完成！");
         });
     }
 
@@ -160,29 +173,42 @@ public partial class CourseHubViewModel : ViewModelBase
             return;
         }
 
-        var job = new TaskJobModel
+        SuccessMessage = $"已并发调度 {targets.Count} 门平时测试作答任务…";
+        _taskService.Log(LogLevel.Info, "并发调度", $"📝 批量下发 {targets.Count} 门平时测试作答任务！");
+
+        var jobs = targets.Select(c => new TaskJobModel
         {
-            Title = $"平时测试作答 ({targets.Count} 门课)",
+            Title = $"测验: {c.Name}",
             Type = FeatureType.HomeworkQuiz,
-            Platform = targets.First().Platform,
-            CourseName = targets.First().Name
-        };
+            Platform = c.Platform,
+            AccountId = c.AccountId,
+            AccountName = string.IsNullOrWhiteSpace(c.AccountDisplayName) ? "默认账号" : c.AccountDisplayName,
+            CourseId = c.CourseId,
+            CourseName = c.Name
+        }).ToList();
 
-        await _taskService.StartJobAsync(job, async (token, progress, step) =>
+        await _taskService.EnqueueBatchJobsAsync(jobs, async (job, token, progress, step) =>
         {
-            step.Report("正在匹配本地已验证答案图库与题库…");
+            step.Report($"[{job.AccountName}] 正在检索本地已验证高精答案图与题库…");
             await Task.Delay(800, token);
-            progress.Report(25);
+            progress.Report(30);
 
-            step.Report("调用统一模型调度器 [FastSolver + Vision] 解析未知题面…");
-            await Task.Delay(1200, token);
-            progress.Report(65);
+            step.Report($"[{job.AccountName}] 调度统一模型池 [FastSolver + Vision] 并发解析未知题面…");
+            await Task.Delay(1400, token);
+            progress.Report(70);
 
-            step.Report("逐题保存作答草稿（保护模式生效中，暂不交卷）…");
-            await Task.Delay(1000, token);
+            step.Report($"[{job.AccountName}] 逐题保存作答草稿（保护模式开启，杜绝误交卷）…");
+            await Task.Delay(800, token);
             progress.Report(100);
 
-            step.Report("已成功保存所有平时测试答案！");
+            var targetCourse = DisplayCourses.FirstOrDefault(x => x.CourseId == job.CourseId) ?? 
+                               AllCourses.FirstOrDefault(x => x.CourseId == job.CourseId);
+            if (targetCourse != null)
+            {
+                targetCourse.PendingHomeworkCount = Math.Max(0, targetCourse.PendingHomeworkCount - 1);
+            }
+
+            step.Report($"《{job.CourseName}》平时测试已全部安全完成！");
         });
     }
 }

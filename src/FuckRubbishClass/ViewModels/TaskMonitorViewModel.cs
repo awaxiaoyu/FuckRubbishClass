@@ -17,10 +17,14 @@ public partial class TaskMonitorViewModel : ViewModelBase
     private readonly IEventBus _eventBus;
 
     public ObservableCollection<TaskJobModel> Jobs => _taskService.Jobs;
+    public ObservableCollection<TaskJobModel> RunningJobs => _taskService.RunningJobs;
+    public ObservableCollection<TaskJobModel> PendingJobs => _taskService.PendingJobs;
+    public ObservableCollection<TaskJobModel> FinishedJobs => _taskService.FinishedJobs;
     public ObservableCollection<LogEntry> AllLogs => _logger.LiveLogs;
     public ObservableCollection<LogEntry> FilteredLogs { get; } = new();
 
-    public TaskJobModel? CurrentRunningJob => _taskService.CurrentRunningJob;
+    public int ActiveWorkerCount => _taskService.ActiveWorkerCount;
+    public int MaxConcurrency => _taskService.MaxConcurrency;
 
     [ObservableProperty]
     private string _selectedLogLevelFilter = "全部";
@@ -53,12 +57,12 @@ public partial class TaskMonitorViewModel : ViewModelBase
         _eventBus.Subscribe<TaskJobStartedEvent>(this, e =>
         {
             SelectedJob = e.Job;
-            OnPropertyChanged(nameof(CurrentRunningJob));
+            OnPropertyChanged(nameof(ActiveWorkerCount));
         });
 
         _eventBus.Subscribe<TaskJobCompletedEvent>(this, e =>
         {
-            OnPropertyChanged(nameof(CurrentRunningJob));
+            OnPropertyChanged(nameof(ActiveWorkerCount));
         });
     }
 
@@ -80,12 +84,21 @@ public partial class TaskMonitorViewModel : ViewModelBase
     [RelayCommand]
     private void CancelJob(TaskJobModel? job)
     {
-        var target = job ?? SelectedJob ?? CurrentRunningJob;
+        var target = job ?? SelectedJob ?? RunningJobs.FirstOrDefault();
         if (target != null)
         {
             _taskService.CancelJob(target.Id);
             SuccessMessage = $"已停止任务：{target.Title}";
+            OnPropertyChanged(nameof(ActiveWorkerCount));
         }
+    }
+
+    [RelayCommand]
+    private void CancelAllJobs()
+    {
+        _taskService.CancelAllJobs();
+        SuccessMessage = "已终止全部并发任务与排队队列";
+        OnPropertyChanged(nameof(ActiveWorkerCount));
     }
 
     [RelayCommand]

@@ -93,23 +93,9 @@ public partial class MainViewModel : ViewModelBase
         });
 
         // 任务状态与进度事件
-        _eventBus.Subscribe<TaskJobStartedEvent>(this, e =>
-        {
-            HasActiveTask = true;
-            TaskStatusSummary = $"运行中: {e.Job.Title} (0%)";
-        });
-
-        _eventBus.Subscribe<TaskJobProgressEvent>(this, e =>
-        {
-            HasActiveTask = true;
-            TaskStatusSummary = $"运行中: {e.CurrentStep} ({e.Progress:F0}%)";
-        });
-
-        _eventBus.Subscribe<TaskJobCompletedEvent>(this, e =>
-        {
-            HasActiveTask = false;
-            TaskStatusSummary = e.IsSuccess ? $"已完成: {e.Job.Title}" : $"已终止: {e.Job.Title}";
-        });
+        _eventBus.Subscribe<TaskJobStartedEvent>(this, e => UpdateStatus());
+        _eventBus.Subscribe<TaskJobProgressEvent>(this, e => UpdateStatus());
+        _eventBus.Subscribe<TaskJobCompletedEvent>(this, e => UpdateStatus());
 
         // 页面跳转请求事件
         _eventBus.Subscribe<NavigationRequestedEvent>(this, e =>
@@ -172,10 +158,26 @@ public partial class MainViewModel : ViewModelBase
             ? $"{primary.DisplayTitle} ({primary.PlatformDisplayName})"
             : "未登录账号";
 
-        var running = _taskService.CurrentRunningJob;
-        HasActiveTask = running != null && running.Status == TaskExecutionStatus.Running;
-        TaskStatusSummary = HasActiveTask
-            ? $"运行中: {running!.Title} ({running.ProgressPercent:F0}%)"
-            : "空闲就绪";
+        var runningCount = _taskService.ActiveWorkerCount;
+        var pendingCount = _taskService.PendingJobs.Count;
+
+        HasActiveTask = runningCount > 0;
+        if (runningCount > 0)
+        {
+            var current = _taskService.RunningJobs.FirstOrDefault();
+            var step = current != null ? current.Title : "并发刷课任务";
+            TaskStatusSummary = runningCount == 1
+                ? $"⚡ 运行中: {step} ({current?.ProgressPercent:F0}%)"
+                : $"⚡ 多线程并发中: {runningCount} 个跨平台/多账号任务正在并行 (队列排队: {pendingCount})";
+        }
+        else if (pendingCount > 0)
+        {
+            TaskStatusSummary = $"⏳ 队列等待: {pendingCount} 个任务排队中…";
+            HasActiveTask = true;
+        }
+        else
+        {
+            TaskStatusSummary = "空闲就绪 (并发多线程引擎已待命)";
+        }
     }
 }

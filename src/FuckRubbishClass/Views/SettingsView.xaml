@@ -39,6 +39,51 @@
                     </StackPanel>
                 </Border>
 
+                <!-- SECTION 0: Concurrency Settings -->
+                <Border Style="{StaticResource FluentCardElevatedStyle}" Margin="0,0,0,18">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="多平台多账号并发调度引擎" Style="{StaticResource SectionTitleStyle}" />
+                                <TextBlock Text="支持跨平台、跨账号并行刷课；智能单账号限流保护，避免触发多地登录或多视频流同时播放风控。" 
+                                           Style="{StaticResource SubheaderTextStyle}" Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <ui:ToggleSwitch Grid.Column="1" HorizontalAlignment="Right" OnContent="并发引擎开启" OffContent="单线程排队模式" 
+                                             IsChecked="{Binding Settings.EnableConcurrentDispatch}" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="{Binding Settings.MaxConcurrentTasks, StringFormat='{}全局最大并行线程数: {0}'}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <Slider Minimum="1" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True" 
+                                        Value="{Binding Settings.MaxConcurrentTasks}" />
+                                <TextBlock Text="决定整个应用同时运行的最多刷课任务数量。" FontSize="11" Foreground="#64748B" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="5,0,5,0">
+                                <TextBlock Text="{Binding Settings.MaxConcurrentPerAccount, StringFormat='{}单账号并发视频流上限: {0}'}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <Slider Minimum="1" Maximum="3" TickFrequency="1" IsSnapToTickEnabled="True" 
+                                        Value="{Binding Settings.MaxConcurrentPerAccount}" />
+                                <TextBlock Text="推荐设为1：同账号任务自动排队，不同账号完全并行。" FontSize="11" Foreground="#10B981" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="10,0,0,0">
+                                <TextBlock Text="{Binding Settings.StaggerDelayMs, StringFormat='{}并发启动错峰间隔: {0} ms'}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <Slider Minimum="500" Maximum="5000" TickFrequency="500" IsSnapToTickEnabled="True" 
+                                        Value="{Binding Settings.StaggerDelayMs}" />
+                                <TextBlock Text="避免多个 Worker 瞬间同时向服务器发起握手请求。" FontSize="11" Foreground="#64748B" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- SECTION 1: Proxy Settings -->
                 <Border Style="{StaticResource FluentCardElevatedStyle}" Margin="0,0,0,18">
                     <StackPanel>

@@ -43,6 +43,19 @@ public partial class AppSettings : ObservableObject
     [ObservableProperty]
     private string _logsDirectory = "data/logs";
 
+    // 多平台多账号多线程并发调度
+    [ObservableProperty]
+    private bool _enableConcurrentDispatch = true;
+
+    [ObservableProperty]
+    private int _maxConcurrentTasks = 3; // 全局最大并行任务数 (1~8)
+
+    [ObservableProperty]
+    private int _maxConcurrentPerAccount = 1; // 单账号并发限制 (推荐1，防平台多地同时播放风控)
+
+    [ObservableProperty]
+    private int _staggerDelayMs = 1200; // 并发启动错峰间隔毫秒 (防突发高频请求)
+
     // 外观偏好
     [ObservableProperty]
     private string _themeMode = "Light"; // Light, Dark, System
