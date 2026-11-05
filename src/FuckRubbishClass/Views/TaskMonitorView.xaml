@@ -1,0 +1,168 @@
+<UserControl x:Class="FuckRubbishClass.Views.TaskMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignHeight="850" d:DesignWidth="1100">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Page Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="EXECUTION &amp; REALTIME LOGS" Style="{StaticResource KickerTextStyle}" />
+                <TextBlock Text="任务调度与日志监控" Style="{StaticResource HeaderTitleStyle}" Margin="0,6,0,4" />
+                <TextBlock Text="全景监控跨平台任务执行流水线，实时输出调度控制台与模型推理日志。" 
+                           Style="{StaticResource SubheaderTextStyle}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:Button Content="复制日志" Icon="{ui:SymbolIcon Symbol=Copy24}" Command="{Binding CopyLogsToClipboardCommand}" 
+                           Margin="0,0,8,0" Padding="12,8" />
+                <ui:Button Appearance="Danger" Content="清空控制台" Icon="{ui:SymbolIcon Symbol=Delete24}" Command="{Binding ClearLogsCommand}" 
+                           Padding="12,8" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Feedback Banner -->
+        <Border Grid.Row="1" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,14"
+                Visibility="{Binding SuccessMessage, Converter={StaticResource StringNullOrEmptyToVisConverter}}">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="#2563EB" Margin="0,0,8,0" />
+                <TextBlock Text="{Binding SuccessMessage}" Foreground="#1E3A8A" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- Two Columns: Jobs History List (Left) + Terminal Console (Right) -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Task Jobs Queue -->
+            <Border Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource FluentCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="任务队列与历史" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,12" />
+
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}"
+                             BorderThickness="0" Background="Transparent" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="12,10" Margin="0,0,0,6" CornerRadius="10" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Title & Status Badge -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#0F172A"
+                                                       TextTrimming="CharacterEllipsis" Width="200" HorizontalAlignment="Left" />
+                                            <Border HorizontalAlignment="Right" Padding="6,2" CornerRadius="4" Background="{Binding StatusBadgeColor}">
+                                                <TextBlock Text="{Binding Status}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Step info -->
+                                        <TextBlock Grid.Row="1" Text="{Binding CurrentStep}" FontSize="11" Foreground="#64748B" TextTrimming="CharacterEllipsis" Margin="0,0,0,8" />
+
+                                        <!-- Progress Bar & Actions -->
+                                        <Grid Grid.Row="2">
+                                            <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="4" Foreground="#2563EB" Background="#E2E8F0" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- Right: Modern Dark-themed Terminal Log Console -->
+            <Border Grid.Column="1" Background="#0F172A" CornerRadius="14" Padding="18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Terminal Controls Header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,14">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Mac/Linux style dots for authentic terminal aesthetic -->
+                            <Ellipse Width="10" Height="10" Fill="#EF4444" Margin="0,0,6,0" />
+                            <Ellipse Width="10" Height="10" Fill="#F59E0B" Margin="0,0,6,0" />
+                            <Ellipse Width="10" Height="10" Fill="#10B981" Margin="0,0,14,0" />
+                            <TextBlock Text="TERMINAL LOG CONSOLE" FontFamily="Consolas" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" />
+                        </StackPanel>
+
+                        <!-- Log Filters -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <RadioButton Content="全部" Style="{x:Null}" Foreground="#94A3B8" FontSize="11" Margin="0,0,10,0" IsChecked="True"
+                                         Click="OnFilterLogLevel" Tag="全部" />
+                            <RadioButton Content="信息" Style="{x:Null}" Foreground="#60A5FA" FontSize="11" Margin="0,0,10,0"
+                                         Click="OnFilterLogLevel" Tag="信息" />
+                            <RadioButton Content="成功" Style="{x:Null}" Foreground="#34D399" FontSize="11" Margin="0,0,10,0"
+                                         Click="OnFilterLogLevel" Tag="成功" />
+                            <RadioButton Content="警告" Style="{x:Null}" Foreground="#FBBF24" FontSize="11" Margin="0,0,10,0"
+                                         Click="OnFilterLogLevel" Tag="警告" />
+                            <RadioButton Content="错误" Style="{x:Null}" Foreground="#F87171" FontSize="11"
+                                         Click="OnFilterLogLevel" Tag="错误" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Terminal Messages List -->
+                    <ListBox Grid.Row="1" ItemsSource="{Binding FilteredLogs}" Background="Transparent" BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Time -->
+                                    <TextBlock Text="{Binding TimeFormatted}" FontFamily="Consolas" FontSize="11" Foreground="#64748B" Margin="0,0,10,0" />
+
+                                    <!-- Level -->
+                                    <Border Grid.Column="1" Padding="4,1" CornerRadius="3" Background="{Binding LevelBadgeColor}" Margin="0,0,8,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Level}" FontSize="9" FontWeight="Bold" Foreground="White" FontFamily="Consolas" />
+                                    </Border>
+
+                                    <!-- Source -->
+                                    <TextBlock Grid.Column="2" Text="{Binding Source, StringFormat='[{0}] '}" FontFamily="Consolas" FontSize="11" Foreground="#94A3B8" Margin="0,0,6,0" />
+
+                                    <!-- Message -->
+                                    <TextBlock Grid.Column="3" Text="{Binding Message}" FontFamily="Consolas" FontSize="11" Foreground="#F1F5F9" TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                </Grid>
+            </Border>
+
+        </Grid>
+
+    </Grid>
+</UserControl>

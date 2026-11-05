@@ -1,0 +1,189 @@
+<UserControl x:Class="FuckRubbishClass.Views.CourseHubView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignHeight="800" d:DesignWidth="1100">
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,16,0">
+            <StackPanel Margin="0,0,0,24">
+                
+                <!-- Page Header -->
+                <Grid Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="COURSE &amp; TASK CENTER" Style="{StaticResource KickerTextStyle}" />
+                        <TextBlock Text="课程与任务中心" Style="{StaticResource HeaderTitleStyle}" Margin="0,6,0,4" />
+                        <TextBlock Text="跨平台统一检索已绑定的所有在线课程，一键下发自学、作答和考试任务。" 
+                                   Style="{StaticResource SubheaderTextStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:Button Appearance="Secondary" Content="同步全量课程" Icon="{ui:SymbolIcon Symbol=ArrowSync24}" 
+                                   Command="{Binding RefreshAllCoursesCommand}" Padding="14,9" Margin="0,0,8,0" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Filter & Batch Action Bar -->
+                <Border Style="{StaticResource FluentCardStyle}" Margin="0,0,0,18" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Top row: Search & Platform filter -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="260" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <ui:TextBox Text="{Binding SearchKeyword, UpdateSourceTrigger=PropertyChanged}" 
+                                        PlaceholderText="搜索课程名称 / 教师 / ID…" Icon="{ui:SymbolIcon Symbol=Search24}" />
+
+                            <!-- Platform Filter Radio Buttons -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <RadioButton Content="全部课程" Margin="0,0,12,0" IsChecked="True" 
+                                             Command="{Binding RefreshDisplayListCommand}"
+                                             Click="OnFilterClicked" Tag="全部" />
+                                <RadioButton Content="智慧树 / 知到" Margin="0,0,12,0"
+                                             Click="OnFilterClicked" Tag="智慧树" />
+                                <RadioButton Content="学习通 / 超星" Margin="0,0,12,0"
+                                             Click="OnFilterClicked" Tag="学习通" />
+                                <RadioButton Content="课堂派"
+                                             Click="OnFilterClicked" Tag="课堂派" />
+                            </StackPanel>
+
+                            <!-- Selection Stats -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="已选 " Foreground="#64748B" FontSize="12" />
+                                <TextBlock Text="{Binding SelectedCount}" FontWeight="Bold" Foreground="#2563EB" FontSize="12" />
+                                <TextBlock Text=" / " Foreground="#64748B" FontSize="12" />
+                                <TextBlock Text="{Binding TotalCount}" Foreground="#64748B" FontSize="12" />
+                                <TextBlock Text=" 门课程" Foreground="#64748B" FontSize="12" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Bottom row: Batch action buttons -->
+                        <Grid Grid.Row="1" Margin="0,12,0,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:Button Content="全选" Command="{Binding SelectAllCommand}" Padding="10,6" FontSize="11" Margin="0,0,6,0" />
+                                <ui:Button Content="取消全选" Command="{Binding DeselectAllCommand}" Padding="10,6" FontSize="11" Margin="0,0,14,0" />
+
+                                <Border Width="1" Height="16" Background="#E2E8F0" Margin="0,0,14,0" />
+
+                                <ui:Button Appearance="Primary" Content="批量自学视频" Icon="{ui:SymbolIcon Symbol=Play24}" 
+                                           Command="{Binding RunBatchVideoStudyCommand}" Padding="14,7" FontSize="12" Margin="0,0,8,0" />
+                                <ui:Button Appearance="Secondary" Content="批量平时测试" Icon="{ui:SymbolIcon Symbol=DocumentCheckmark24}" 
+                                           Command="{Binding RunBatchHomeworkCommand}" Padding="14,7" FontSize="12" />
+                            </StackPanel>
+                        </Grid>
+
+                    </Grid>
+                </Border>
+
+                <!-- Course Cards Grid -->
+                <ItemsControl ItemsSource="{Binding DisplayCourses}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="340" Margin="0,0,16,16" Style="{StaticResource FluentCardStyle}" Padding="0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Top Color Header Strip -->
+                                    <Border Grid.Row="0" Height="6" CornerRadius="14,14,0,0" Background="{Binding CoverColor}" />
+
+                                    <!-- Content Body -->
+                                    <StackPanel Grid.Row="1" Margin="18,14,18,14">
+                                        <!-- Platform & Mode Badges -->
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Border Padding="6,2" CornerRadius="4" 
+                                                        Background="{Binding Platform, Converter={StaticResource PlatformToSoftBgConverter}}">
+                                                    <TextBlock Text="{Binding PlatformDisplayName}" FontSize="10" FontWeight="Bold"
+                                                               Foreground="{Binding Platform, Converter={StaticResource PlatformToColorConverter}}" />
+                                                </Border>
+
+                                                <Border Margin="6,0,0,0" Padding="6,2" CornerRadius="4" Background="#F1F5F9">
+                                                    <TextBlock Text="{Binding ModeLabel}" FontSize="10" Foreground="#475569" />
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Checkbox for multi-select -->
+                                            <CheckBox HorizontalAlignment="Right" IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                        </Grid>
+
+                                        <!-- Title -->
+                                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A" 
+                                                   TextTrimming="CharacterEllipsis" Margin="0,0,0,6" MaxHeight="46" TextWrapping="Wrap" />
+
+                                        <!-- Instructor info -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                            <TextBlock Text="{Binding Teacher}" FontSize="11" Foreground="#64748B" />
+                                            <TextBlock Text=" · " FontSize="11" Foreground="#94A3B8" />
+                                            <TextBlock Text="{Binding School}" FontSize="11" Foreground="#64748B" />
+                                        </StackPanel>
+
+                                        <!-- Progress Bar -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="6" Foreground="#2563EB" Background="#E2E8F0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="11" FontWeight="SemiBold" 
+                                                       Foreground="#2563EB" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        </Grid>
+
+                                        <!-- Pending task hints -->
+                                        <StackPanel Orientation="Horizontal" Visibility="{Binding HasPendingTasks, Converter={StaticResource BoolToVisConverter}}">
+                                            <Border Padding="6,2" CornerRadius="4" Background="#FEF2F2" Margin="0,0,6,0"
+                                                    Visibility="{Binding PendingHomeworkCount, Converter={StaticResource StringNullOrEmptyToVisConverter}, FallbackValue=Collapsed}">
+                                                <TextBlock Text="{Binding PendingHomeworkCount, StringFormat='{}待作答测验: {0}'}" FontSize="10" Foreground="#DC2626" FontWeight="SemiBold" />
+                                            </Border>
+                                            <Border Padding="6,2" CornerRadius="4" Background="#FFFBEB"
+                                                    Visibility="{Binding PendingExamCount, Converter={StaticResource StringNullOrEmptyToVisConverter}, FallbackValue=Collapsed}">
+                                                <TextBlock Text="{Binding PendingExamCount, StringFormat='{}考试: {0}'}" FontSize="10" Foreground="#D97706" FontWeight="SemiBold" />
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- Bottom Action Bar -->
+                                    <Border Grid.Row="2" Background="#F8FAFC" BorderBrush="#F1F5F9" BorderThickness="0,1,0,0" 
+                                            CornerRadius="0,0,14,14" Padding="14,10">
+                                        <Grid>
+                                            <TextBlock Text="{Binding AccountDisplayName, StringFormat='{}账号: {0}'}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <ui:Button Content="自学" Padding="8,4" FontSize="11" Margin="0,0,4,0"
+                                                           Command="{Binding DataContext.RunBatchVideoStudyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                <ui:Button Content="做测验" Padding="8,4" FontSize="11"
+                                                           Command="{Binding DataContext.RunBatchHomeworkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
