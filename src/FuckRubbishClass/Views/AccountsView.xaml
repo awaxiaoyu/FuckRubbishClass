@@ -41,11 +41,16 @@
                 </Border>
 
                 <!-- Add Account Form Card (Collapsible) -->
+                <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
+                        Visibility="{Binding ErrorMessage, Converter={StaticResource StringNullOrEmptyToVisConverter}}">
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#991B1B" TextWrapping="Wrap" />
+                </Border>
+
                 <Border Style="{StaticResource FluentCardElevatedStyle}" Margin="0,0,0,20" Background="#F8FAFC"
                         Visibility="{Binding IsAddingAccount, Converter={StaticResource BoolToVisConverter}}">
                     <StackPanel>
-                        <TextBlock Text="添加新平台账号" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,4" />
-                        <TextBlock Text="输入账号认证信息，账号凭据仅加密保存在本地 accounts.json。" Style="{StaticResource SubheaderTextStyle}" Margin="0,0,0,16" />
+                        <TextBlock Text="{Binding AccountFormTitle}" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,4" />
+                        <TextBlock Text="保存后点击登录验证会话；编辑时密码留空会保留原密码。" Style="{StaticResource SubheaderTextStyle}" Margin="0,0,0,16" />
 
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
@@ -59,7 +64,6 @@
                                     <ComboBoxItem Content="智慧树 / 知到" Tag="{x:Static models:PlatformType.Zhihuishu}" IsSelected="True" />
                                     <ComboBoxItem Content="学习通 / 超星" Tag="{x:Static models:PlatformType.Chaoxing}" />
                                     <ComboBoxItem Content="课堂派" Tag="{x:Static models:PlatformType.Ketangpai}" />
-                                    <ComboBoxItem Content="通用/自定义平台" Tag="{x:Static models:PlatformType.Custom}" />
                                 </ComboBox>
                             </StackPanel>
 
@@ -94,12 +98,25 @@
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <ui:Button Content="取消" Command="{Binding CancelAddAccountCommand}" Margin="0,0,8,0" Padding="16,8" />
-                            <ui:Button Appearance="Primary" Content="确认保存并添加" Command="{Binding ConfirmAddAccountCommand}" Padding="18,8" />
+                            <ui:Button Appearance="Primary" Content="保存账号" Command="{Binding ConfirmAddAccountCommand}" Padding="18,8" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <!-- Accounts Grid List -->
+                <Border Padding="30" Margin="0,0,0,16" Background="#F8FAFC" CornerRadius="12">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers><DataTrigger Binding="{Binding Accounts.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="添加第一个平台账号" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="智慧树支持扫码，学习通使用托管浏览器，课堂派填写账号密码。" Foreground="#64748B" Margin="0,8,0,16" TextWrapping="Wrap" />
+                        <ui:Button Content="添加账号" Command="{Binding StartAddAccountCommand}" HorizontalAlignment="Center" Padding="16,8" />
+                    </StackPanel>
+                </Border>
                 <ItemsControl ItemsSource="{Binding Accounts}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -169,26 +186,19 @@
                                     </Border>
 
                                     <!-- Action Buttons -->
-                                    <Grid Grid.Row="3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <ui:Button Content="刷新会话" Icon="{ui:SymbolIcon Symbol=ArrowSync24}" Padding="8,6" FontSize="11"
-                                                   Command="{Binding DataContext.RefreshSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                   CommandParameter="{Binding}" />
-
-                                        <ui:Button Grid.Column="1" Content="设为主账号" Margin="6,0,0,0" Padding="8,6" FontSize="11"
-                                                   Command="{Binding DataContext.SetAsPrimaryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                   CommandParameter="{Binding}"
+                                    <WrapPanel Grid.Row="3">
+                                        <ui:Button Content="登录" Padding="8,6" Margin="0,0,6,6" FontSize="11"
+                                                   Command="{Binding DataContext.LoginAccountCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        <ui:Button Content="刷新会话" Padding="8,6" Margin="0,0,6,6" FontSize="11"
+                                                   Command="{Binding DataContext.RefreshSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        <ui:Button Content="编辑" Padding="8,6" Margin="0,0,6,6" FontSize="11"
+                                                   Command="{Binding DataContext.EditAccountCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        <ui:Button Content="设为主账号" Padding="8,6" Margin="0,0,6,6" FontSize="11"
+                                                   Command="{Binding DataContext.SetAsPrimaryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                                                    Visibility="{Binding IsPrimary, Converter={StaticResource InverseBoolToVisConverter}}" />
-
-                                        <ui:Button Grid.Column="2" Appearance="Danger" Icon="{ui:SymbolIcon Symbol=Delete24}" Margin="6,0,0,0" Padding="8,6"
-                                                   Command="{Binding DataContext.DeleteAccountCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                   CommandParameter="{Binding}" />
-                                    </Grid>
+                                        <ui:Button Appearance="Danger" Content="移除" Padding="8,6" Margin="0,0,6,6" FontSize="11"
+                                                   Command="{Binding DataContext.DeleteAccountCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    </WrapPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -215,6 +225,7 @@
                                 <ui:SymbolIcon Symbol="QrCode24" FontSize="96" Foreground="#3B82F6" HorizontalAlignment="Center" />
                                 <TextBlock Text="扫描二维码授权登录" FontSize="12" Foreground="#64748B" HorizontalAlignment="Center" Margin="0,8,0,0" />
                             </StackPanel>
+                            <Image Source="{Binding QrImage}" Stretch="Uniform" Margin="4" />
                         </Grid>
                     </Border>
 
@@ -226,7 +237,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <ui:Button Content="取消" Command="{Binding CloseQrLoginCommand}" Margin="0,0,6,0" Padding="12,8" />
-                        <ui:Button Grid.Column="1" Appearance="Primary" Content="完成扫码" Command="{Binding CompleteQrLoginCommand}" Margin="6,0,0,0" Padding="12,8" />
+                        <TextBlock Grid.Column="1" Text="平台验证后自动完成" VerticalAlignment="Center" Foreground="#64748B" />
                     </Grid>
                 </StackPanel>
             </Border>

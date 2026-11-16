@@ -29,6 +29,15 @@
                 </Grid>
 
                 <!-- Filter & Batch Action Bar -->
+                <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
+                        Visibility="{Binding ErrorMessage, Converter={StaticResource StringNullOrEmptyToVisConverter}}">
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#991B1B" TextWrapping="Wrap" />
+                </Border>
+                <Border Background="#EFF6FF" CornerRadius="8" Padding="12,8" Margin="0,0,0,16"
+                        Visibility="{Binding SuccessMessage, Converter={StaticResource StringNullOrEmptyToVisConverter}}">
+                    <TextBlock Text="{Binding SuccessMessage}" Foreground="#1E3A8A" TextWrapping="Wrap" />
+                </Border>
+
                 <Border Style="{StaticResource FluentCardStyle}" Margin="0,0,0,18" Padding="14">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -89,6 +98,18 @@
                 </Border>
 
                 <!-- Course Cards Grid -->
+                <Border Background="#F8FAFC" CornerRadius="12" Padding="28" Margin="0,0,0,16">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers><DataTrigger Binding="{Binding DisplayCourses.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel>
+                        <TextBlock Text="还没有匹配的课程" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="请先登录账号并同步课程，或调整平台与关键词筛选。" Foreground="#64748B" Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
                 <ItemsControl ItemsSource="{Binding DisplayCourses}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

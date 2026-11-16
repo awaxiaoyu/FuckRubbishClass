@@ -68,10 +68,8 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Margin="5,0,5,0">
-                                <TextBlock Text="{Binding Settings.MaxConcurrentPerAccount, StringFormat='{}单账号并发视频流上限: {0}'}" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <Slider Minimum="1" Maximum="3" TickFrequency="1" IsSnapToTickEnabled="True" 
-                                        Value="{Binding Settings.MaxConcurrentPerAccount}" />
-                                <TextBlock Text="推荐设为1：同账号任务自动排队，不同账号完全并行。" FontSize="11" Foreground="#10B981" Margin="0,4,0,0" />
+                                <TextBlock Text="单账号同时执行 1 个任务" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Text="同账号任务串行排队，不同账号可并行。" FontSize="11" Foreground="#10B981" Margin="0,4,0,0" />
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" Margin="10,0,0,0">

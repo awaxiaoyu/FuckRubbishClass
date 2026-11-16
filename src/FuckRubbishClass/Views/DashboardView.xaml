@@ -251,9 +251,9 @@
                 <Border Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource FluentCardStyle}">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0" Margin="0,0,0,12">

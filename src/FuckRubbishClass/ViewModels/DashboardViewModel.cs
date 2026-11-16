@@ -72,56 +72,16 @@ public partial class DashboardViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task QuickStartVideoAsync()
+    private void QuickStartVideo()
     {
-        NavigateTo("features");
-        var first = Courses.FirstOrDefault();
-        if (first != null)
-        {
-            var job = new TaskJobModel
-            {
-                Title = $"快速自学: {first.Name}",
-                Type = FeatureType.VideoStudy,
-                Platform = first.Platform,
-                CourseName = first.Name
-            };
-            await _taskService.StartJobAsync(job, async (token, progress, step) =>
-            {
-                step.Report("进入课程播放列表…");
-                await Task.Delay(1000, token);
-                progress.Report(40);
-                step.Report("正在保持倍速自学播放中…");
-                await Task.Delay(1500, token);
-                progress.Report(100);
-                step.Report("该小节已自学完成！");
-            });
-        }
+        NavigateTo("courses");
+        _taskService.Log(LogLevel.Info, "快捷入口", "请选择已同步的课程，再启动自学任务。");
     }
 
     [RelayCommand]
-    private async Task QuickStartHomeworkAsync()
+    private void QuickStartHomework()
     {
         NavigateTo("features");
-        var first = Courses.FirstOrDefault(x => x.PendingHomeworkCount > 0) ?? Courses.FirstOrDefault();
-        if (first != null)
-        {
-            var job = new TaskJobModel
-            {
-                Title = $"一键平时测试: {first.Name}",
-                Type = FeatureType.HomeworkQuiz,
-                Platform = first.Platform,
-                CourseName = first.Name
-            };
-            await _taskService.StartJobAsync(job, async (token, progress, step) =>
-            {
-                step.Report("匹配题库与答案图…");
-                await Task.Delay(1000, token);
-                progress.Report(50);
-                step.Report("AI 调度未知题解答…");
-                await Task.Delay(1200, token);
-                progress.Report(100);
-                step.Report("草稿已安全保存！");
-            });
-        }
+        _taskService.Log(LogLevel.Info, "快捷入口", "请选择智慧树课程并检查作业参数，再启动平时测试。");
     }
 }

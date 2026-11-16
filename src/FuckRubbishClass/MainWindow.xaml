@@ -83,7 +83,7 @@
 
                     <!-- Navigation Items List -->
                     <ListBox x:Name="NavListBox" Grid.Row="2" BorderThickness="0" Background="Transparent" 
-                             SelectedIndex="0" SelectionChanged="OnNavSelectionChanged">
+                             SelectedIndex="0">
                         
                         <!-- Dashboard -->
                         <ListBoxItem Tag="dashboard" Style="{StaticResource NavRailItemStyle}">

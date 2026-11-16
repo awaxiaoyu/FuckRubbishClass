@@ -6,6 +6,14 @@ using System.Windows.Media;
 
 namespace FuckRubbishClass.Converters;
 
+public sealed class StringEqualsConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        string.Equals(value as string, parameter as string, StringComparison.Ordinal);
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true ? parameter : Binding.DoNothing;
+}
+
 public class BoolToVisibilityConverter : IValueConverter
 {
     public bool Invert { get; set; }

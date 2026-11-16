@@ -3,6 +3,10 @@ using CommunityToolkit.Mvvm.Input;
 using FuckRubbishClass.Models;
 using FuckRubbishClass.Services;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Text.Json;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace FuckRubbishClass.ViewModels;
 
@@ -10,6 +14,14 @@ public partial class AccountsViewModel : ViewModelBase
 {
     private readonly IAccountService _accountService;
     private readonly ITaskExecutionService _taskService;
+    private readonly IPlatformBackendService _backend;
+    private readonly ICourseService _courses;
+    private CancellationTokenSource? _loginCancellation;
+    private AccountModel? _editingAccount;
+    public string AccountFormTitle => _editingAccount == null ? "添加平台账号" : "编辑平台账号";
+
+    [ObservableProperty]
+    private ImageSource? _qrImage;
 
     public ObservableCollection<AccountModel> Accounts => _accountService.Accounts;
 
@@ -48,16 +60,21 @@ public partial class AccountsViewModel : ViewModelBase
     [ObservableProperty]
     private string _qrPlatformTitle = "智慧树扫码登录";
 
-    public AccountsViewModel(IAccountService accountService, ITaskExecutionService taskService)
+    public AccountsViewModel(IAccountService accountService, ITaskExecutionService taskService, IPlatformBackendService backend, ICourseService courses)
     {
         _accountService = accountService;
         _taskService = taskService;
+        _backend = backend;
+        _courses = courses;
         SelectedAccount = _accountService.Accounts.FirstOrDefault();
     }
 
     [RelayCommand]
     private void StartAddAccount()
     {
+        _editingAccount = null;
+        OnPropertyChanged(nameof(AccountFormTitle));
+        ClearMessages();
         NewAccountPlatform = PlatformType.Zhihuishu;
         NewAccountUsername = string.Empty;
         NewAccountDisplayName = string.Empty;
@@ -67,9 +84,26 @@ public partial class AccountsViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void EditAccount(AccountModel? account)
+    {
+        if (account == null) return;
+        ClearMessages();
+        _editingAccount = account;
+        NewAccountPlatform = account.Platform;
+        NewAccountUsername = account.Username;
+        NewAccountDisplayName = account.DisplayName;
+        NewAccountSchool = account.School;
+        NewAccountPassword = "";
+        IsAddingAccount = true;
+        OnPropertyChanged(nameof(AccountFormTitle));
+    }
+
+    [RelayCommand]
     private void CancelAddAccount()
     {
         IsAddingAccount = false;
+        _editingAccount = null;
+        NewAccountPassword = "";
     }
 
     [RelayCommand]
@@ -81,28 +115,37 @@ public partial class AccountsViewModel : ViewModelBase
             return;
         }
 
-        var acc = new AccountModel
+        var editing = _editingAccount != null;
+        if (editing && _editingAccount!.Platform != NewAccountPlatform)
+        { ErrorMessage = "已有账号的平台不能更改，请为其他平台添加新账号。"; return; }
+        var acc = _editingAccount ?? new AccountModel
         {
-            Platform = NewAccountPlatform,
-            Username = NewAccountUsername.Trim(),
-            DisplayName = string.IsNullOrWhiteSpace(NewAccountDisplayName) ? NewAccountUsername.Trim() : NewAccountDisplayName.Trim(),
-            School = string.IsNullOrWhiteSpace(NewAccountSchool) ? "默认院校" : NewAccountSchool.Trim(),
-            Status = AccountStatus.Active,
-            StatusDescription = "已手动配置并保存",
-            IsPrimary = Accounts.Count(x => x.Platform == NewAccountPlatform) == 0,
-            LastActiveTime = DateTime.Now
+            IsPrimary = !Accounts.Any(x => x.Platform == NewAccountPlatform)
         };
+        acc.Platform = NewAccountPlatform;
+        acc.Username = NewAccountUsername.Trim();
+        acc.DisplayName = string.IsNullOrWhiteSpace(NewAccountDisplayName) ? acc.Username : NewAccountDisplayName.Trim();
+        acc.School = NewAccountSchool.Trim();
+        acc.Status = AccountStatus.NeedLogin;
+        acc.StatusDescription = "账号已保存，请点击登录验证会话";
 
         if (!string.IsNullOrWhiteSpace(NewAccountPassword))
         {
             acc.ExtraProperties["Password"] = NewAccountPassword;
         }
 
-        await _accountService.AddAccountAsync(acc);
+        if (editing)
+        {
+            _backend.ReleaseAccount(acc.Id);
+            await _accountService.SaveAccountsAsync();
+        }
+        else await _accountService.AddAccountAsync(acc);
         SelectedAccount = acc;
         IsAddingAccount = false;
-        SuccessMessage = $"已成功添加账号：{acc.DisplayTitle}";
-        _taskService.Log(LogLevel.Success, "账号中心", $"已添加账号 [{acc.PlatformDisplayName}] {acc.DisplayTitle}");
+        _editingAccount = null;
+        NewAccountPassword = "";
+        SuccessMessage = $"账号已保存：{acc.DisplayTitle}";
+        _taskService.Log(LogLevel.Success, "账号中心", $"已保存账号 [{acc.PlatformDisplayName}] {acc.DisplayTitle}");
     }
 
     [RelayCommand]
@@ -155,53 +198,88 @@ public partial class AccountsViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task TriggerQrLoginAsync(PlatformType platform)
+    private Task TriggerQrLoginAsync(PlatformType platform) => LoginAccountAsync(new AccountModel
     {
-        QrPlatformTitle = platform switch
-        {
-            PlatformType.Zhihuishu => "智慧树 / 知到 扫码登录",
-            PlatformType.Chaoxing => "学习通 / 超星 浏览器会话授权",
-            PlatformType.Ketangpai => "课堂派 授权登录",
-            _ => "第三方扫码登录"
-        };
-        QrStatusText = "正在启动登录通道并生成二维码…";
+        Platform = platform, Username = "扫码账号", DisplayName = "扫码账号",
+        Status = AccountStatus.NeedLogin,
+        IsPrimary = !Accounts.Any(a => a.Platform == platform)
+    });
+
+    [RelayCommand]
+    private async Task LoginAccountAsync(AccountModel? account)
+    {
+        account ??= SelectedAccount;
+        if (account == null || _loginCancellation != null) return;
+        ClearMessages();
+        using var cancellation = new CancellationTokenSource();
+        _loginCancellation = cancellation;
+        QrPlatformTitle = $"{account.PlatformDisplayName} 登录";
+        QrStatusText = account.Platform == PlatformType.Chaoxing
+            ? "请在打开的浏览器中完成登录或验证码，验证通过后会自动返回。"
+            : "正在连接平台，请等待实际登录结果…";
+        QrImage = null;
         IsQrLoginVisible = true;
-
-        _taskService.Log(LogLevel.Info, "扫码登录", $"正在唤起 {QrPlatformTitle}…");
-
-        await Task.Delay(1500);
-        QrStatusText = "二维码已生成，请使用手机客户端扫码确认授权。";
+        account.Status = AccountStatus.LoggingIn;
+        var events = new Progress<JsonElement>(value =>
+        {
+            if (value.TryGetProperty("message", out var message)) QrStatusText = message.GetString() ?? "";
+            if (value.TryGetProperty("qrImageBase64", out var image))
+            {
+                using var stream = new MemoryStream(Convert.FromBase64String(image.GetString()!));
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = stream;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                QrImage = bitmap;
+            }
+        });
+        try
+        {
+            var result = await _backend.InvokeAsync(account,
+                account.Platform == PlatformType.Ketangpai ? "course_catalog" : "login",
+                new { username = account.Username, password = account.ExtraProperties.GetValueOrDefault("Password", "") },
+                value => ((IProgress<JsonElement>)events).Report(value), cancellation.Token);
+            if (account.Platform != PlatformType.Ketangpai && !result.GetProperty("result").GetBoolean())
+                throw new BackendOperationException("平台未确认登录成功。");
+            account.Status = AccountStatus.Active;
+            account.StatusDescription = "平台已确认登录成功";
+            account.LastActiveTime = DateTime.Now;
+            if (!Accounts.Contains(account)) await _accountService.AddAccountAsync(account);
+            else await _accountService.SaveAccountsAsync();
+            SelectedAccount = account;
+            IsQrLoginVisible = false;
+            SuccessMessage = $"{account.DisplayTitle} 登录成功";
+            try { await _courses.RefreshCoursesForAccountAsync(account.Id); }
+            catch (Exception ex) { ErrorMessage = $"已登录，课程同步失败：{ex.Message}"; }
+        }
+        catch (OperationCanceledException)
+        {
+            account.Status = AccountStatus.NeedLogin;
+            account.StatusDescription = "登录已取消";
+        }
+        catch (Exception ex)
+        {
+            account.Status = AccountStatus.NeedLogin;
+            account.StatusDescription = ex.Message;
+            QrStatusText = ex.Message;
+            ErrorMessage = ex.Message;
+            _taskService.Log(LogLevel.Error, "登录", ex.Message);
+        }
+        finally
+        {
+            _loginCancellation = null;
+            if (Accounts.Contains(account)) await _accountService.SaveAccountsAsync();
+        }
     }
 
     [RelayCommand]
     private void CloseQrLogin()
     {
+        _loginCancellation?.Cancel();
         IsQrLoginVisible = false;
     }
 
-    [RelayCommand]
-    private async Task CompleteQrLoginAsync()
-    {
-        QrStatusText = "扫码成功，正在同步课程与用户资料…";
-        await Task.Delay(1000);
-
-        var newAcc = new AccountModel
-        {
-            Platform = PlatformType.Zhihuishu,
-            Username = "新扫码用户",
-            DisplayName = "扫码登录用户",
-            School = "厦门大学",
-            Status = AccountStatus.Active,
-            StatusDescription = "扫码授权会话已就绪",
-            IsPrimary = true,
-            LastActiveTime = DateTime.Now,
-            CourseCount = 3
-        };
-
-        await _accountService.AddAccountAsync(newAcc);
-        SelectedAccount = newAcc;
-        IsQrLoginVisible = false;
-        SuccessMessage = "扫码登录成功，已绑定至账号列表！";
-        _taskService.Log(LogLevel.Success, "扫码登录", $"扫码登录成功，账号：{newAcc.DisplayTitle}");
-    }
+    public void CancelLogin() => _loginCancellation?.Cancel();
 }

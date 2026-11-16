@@ -21,7 +21,17 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveSettingsAsync()
     {
+        try
+        {
+            _taskService.MaxConcurrency = Settings.EnableConcurrentDispatch ? Settings.MaxConcurrentTasks : 1;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ErrorMessage = ex.Message;
+            return;
+        }
         await _settingsService.SaveSettingsAsync();
+        _taskService.StaggerDelayMs = Settings.StaggerDelayMs;
         SuccessMessage = "全局系统偏好设置已成功保存！";
         _taskService.Log(LogLevel.Success, "系统设置", "应用全局偏好与代理通知配置已保存。");
     }

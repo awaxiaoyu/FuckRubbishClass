@@ -13,6 +13,8 @@ public partial class MainWindow : FluentWindow
         InitializeComponent();
         _viewModel = new MainViewModel();
         DataContext = _viewModel;
+        NavListBox.SelectionChanged += OnNavSelectionChanged;
+        Closed += (_, _) => _viewModel.Dispose();
 
         _viewModel.DashboardVM.RequestNavigate = tag =>
         {

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using FuckRubbishClass.Models;
 using FuckRubbishClass.Services;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace FuckRubbishClass.ViewModels;
 
@@ -11,6 +12,8 @@ public partial class CourseHubViewModel : ViewModelBase
     private readonly ICourseService _courseService;
     private readonly ITaskExecutionService _taskService;
     private readonly IAccountService _accountService;
+    private readonly IPlatformBackendService _backend;
+    private readonly HashSet<CourseModel> _observedCourses = new();
 
     public ObservableCollection<CourseModel> AllCourses => _courseService.Courses;
     public ObservableCollection<CourseModel> DisplayCourses { get; } = new();
@@ -27,11 +30,12 @@ public partial class CourseHubViewModel : ViewModelBase
     public int SelectedCount => DisplayCourses.Count(x => x.IsSelected);
     public int TotalCount => DisplayCourses.Count;
 
-    public CourseHubViewModel(ICourseService courseService, ITaskExecutionService taskService, IAccountService accountService)
+    public CourseHubViewModel(ICourseService courseService, ITaskExecutionService taskService, IAccountService accountService, IPlatformBackendService backend)
     {
         _courseService = courseService;
         _taskService = taskService;
         _accountService = accountService;
+        _backend = backend;
 
         RefreshDisplayList();
         _courseService.Courses.CollectionChanged += (_, _) => RefreshDisplayList();
@@ -42,6 +46,13 @@ public partial class CourseHubViewModel : ViewModelBase
 
     public void RefreshDisplayList()
     {
+        foreach (var removed in _observedCourses.Where(c => !AllCourses.Contains(c)).ToList())
+        {
+            removed.PropertyChanged -= CoursePropertyChanged;
+            _observedCourses.Remove(removed);
+        }
+        foreach (var course in AllCourses)
+            if (_observedCourses.Add(course)) course.PropertyChanged += CoursePropertyChanged;
         DisplayCourses.Clear();
         var query = AllCourses.AsEnumerable();
 
@@ -69,6 +80,11 @@ public partial class CourseHubViewModel : ViewModelBase
         OnPropertyChanged(nameof(TotalCount));
     }
 
+    private void CoursePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CourseModel.IsSelected)) OnPropertyChanged(nameof(SelectedCount));
+    }
+
     [RelayCommand]
     private void SelectAll()
     {
@@ -93,122 +109,69 @@ public partial class CourseHubViewModel : ViewModelBase
     [RelayCommand]
     private async Task RefreshAllCoursesAsync()
     {
+        ClearMessages();
         IsBusy = true;
-        BusyMessage = "正在从各平台同步最新课程列表…";
-        _taskService.Log(LogLevel.Info, "课程中心", "开始同步所有已绑定账号的课程库…");
-
-        await Task.Delay(1200);
-        await _courseService.LoadCoursesAsync();
-        RefreshDisplayList();
-
-        IsBusy = false;
-        SuccessMessage = $"课程同步完成，当前共 {AllCourses.Count} 门课程";
-        _taskService.Log(LogLevel.Success, "课程中心", $"课程同步成功，已索引 {AllCourses.Count} 门课程。");
-    }
-
-    [RelayCommand]
-    private async Task RunBatchVideoStudyAsync()
-    {
-        var targets = DisplayCourses.Where(x => x.IsSelected).ToList();
-        if (targets.Count == 0 && SelectedCourse != null) targets.Add(SelectedCourse);
-
-        if (targets.Count == 0)
+        BusyMessage = "正在从各平台同步课程…";
+        var failures = new List<string>();
+        try
         {
-            ErrorMessage = "请先选择至少一门课程";
-            return;
-        }
-
-        SuccessMessage = $"已并发调度 {targets.Count} 门课程自学任务，正在并发启动多线程 Worker…";
-        _taskService.Log(LogLevel.Info, "并发调度", $"🚀 批量下发 {targets.Count} 门多平台/多账号并发自学任务！");
-
-        // 为每门选中的课程创建独立的任务作业，支持多平台多账号同时并行
-        var jobs = targets.Select(c => new TaskJobModel
-        {
-            Title = $"自学: {c.Name}",
-            Type = FeatureType.VideoStudy,
-            Platform = c.Platform,
-            AccountId = c.AccountId,
-            AccountName = string.IsNullOrWhiteSpace(c.AccountDisplayName) ? "默认账号" : c.AccountDisplayName,
-            CourseId = c.CourseId,
-            CourseName = c.Name
-        }).ToList();
-
-        await _taskService.EnqueueBatchJobsAsync(jobs, async (job, token, progress, step) =>
-        {
-            var targetCourse = DisplayCourses.FirstOrDefault(x => x.CourseId == job.CourseId) ?? 
-                               AllCourses.FirstOrDefault(x => x.CourseId == job.CourseId);
-
-            step.Report($"连接平台 [{job.PlatformDisplayName}]，账号 [{job.AccountName}] 正在建立播放流…");
-            await Task.Delay(1000, token);
-            progress.Report(10);
-
-            step.Report($"[{job.AccountName}] 进入《{job.CourseName}》视频章节，正在多线程并发自学播放中…");
-            for (int p = 15; p <= 95; p += 15)
+            foreach (var account in _accountService.Accounts.ToList())
             {
-                token.ThrowIfCancellationRequested();
-                await Task.Delay(600, token);
-                progress.Report(p);
-
-                if (targetCourse != null)
+                try { await _courseService.RefreshCoursesForAccountAsync(account.Id); }
+                catch (Exception ex)
                 {
-                    targetCourse.ProgressPercent = Math.Min(100.0, targetCourse.ProgressPercent + 3.0);
+                    failures.Add($"{account.DisplayTitle}: {ex.Message}");
+                    _taskService.Log(LogLevel.Error, "课程同步", failures.Last());
                 }
             }
-
-            if (targetCourse != null) targetCourse.ProgressPercent = 100.0;
-            progress.Report(100);
-            step.Report($"《{job.CourseName}》视频小节达标，该课程本阶段任务完成！");
-        });
+            RefreshDisplayList();
+            if (failures.Count > 0) ErrorMessage = string.Join(Environment.NewLine, failures);
+            else SuccessMessage = $"课程同步完成，共 {AllCourses.Count} 门课程";
+        }
+        finally { IsBusy = false; }
     }
 
     [RelayCommand]
-    private async Task RunBatchHomeworkAsync()
-    {
-        var targets = DisplayCourses.Where(x => x.IsSelected).ToList();
-        if (targets.Count == 0 && SelectedCourse != null) targets.Add(SelectedCourse);
+    private Task RunBatchVideoStudyAsync() => QueueBatchAsync(FeatureType.VideoStudy);
 
-        if (targets.Count == 0)
+    [RelayCommand]
+    private Task RunBatchHomeworkAsync() => QueueBatchAsync(FeatureType.HomeworkQuiz);
+
+    private async Task QueueBatchAsync(FeatureType feature)
+    {
+        ClearMessages();
+        var targets = DisplayCourses.Where(c => c.IsSelected).ToList();
+        if (targets.Count == 0 && SelectedCourse != null) targets.Add(SelectedCourse);
+        if (targets.Count == 0) { ErrorMessage = "请先选择至少一门课程"; return; }
+        if (targets.Any(c => c.Platform == PlatformType.Ketangpai ||
+            (feature == FeatureType.HomeworkQuiz && c.Platform != PlatformType.Zhihuishu)))
         {
-            ErrorMessage = "请先选择至少一门课程";
+            ErrorMessage = feature == FeatureType.HomeworkQuiz
+                ? "平时测试请仅选择智慧树课程。" : "课堂派请使用考勤守护功能。";
             return;
         }
-
-        SuccessMessage = $"已并发调度 {targets.Count} 门平时测试作答任务…";
-        _taskService.Log(LogLevel.Info, "并发调度", $"📝 批量下发 {targets.Count} 门平时测试作答任务！");
-
-        var jobs = targets.Select(c => new TaskJobModel
+        var work = targets.Select(course => new
         {
-            Title = $"测验: {c.Name}",
-            Type = FeatureType.HomeworkQuiz,
-            Platform = c.Platform,
-            AccountId = c.AccountId,
-            AccountName = string.IsNullOrWhiteSpace(c.AccountDisplayName) ? "默认账号" : c.AccountDisplayName,
-            CourseId = c.CourseId,
-            CourseName = c.Name
-        }).ToList();
-
-        await _taskService.EnqueueBatchJobsAsync(jobs, async (job, token, progress, step) =>
-        {
-            step.Report($"[{job.AccountName}] 正在检索本地已验证高精答案图与题库…");
-            await Task.Delay(800, token);
-            progress.Report(30);
-
-            step.Report($"[{job.AccountName}] 调度统一模型池 [FastSolver + Vision] 并发解析未知题面…");
-            await Task.Delay(1400, token);
-            progress.Report(70);
-
-            step.Report($"[{job.AccountName}] 逐题保存作答草稿（保护模式开启，杜绝误交卷）…");
-            await Task.Delay(800, token);
-            progress.Report(100);
-
-            var targetCourse = DisplayCourses.FirstOrDefault(x => x.CourseId == job.CourseId) ?? 
-                               AllCourses.FirstOrDefault(x => x.CourseId == job.CourseId);
-            if (targetCourse != null)
+            Course = course,
+            Account = _accountService.Accounts.FirstOrDefault(a => a.Id == course.AccountId),
+            Job = new TaskJobModel
             {
-                targetCourse.PendingHomeworkCount = Math.Max(0, targetCourse.PendingHomeworkCount - 1);
+                Title = $"{(feature == FeatureType.HomeworkQuiz ? "平时测试" : "视频自学")}: {course.Name}",
+                Type = feature, Platform = course.Platform, AccountId = course.AccountId,
+                AccountName = course.AccountDisplayName, CourseId = course.CourseId, CourseName = course.Name
             }
-
-            step.Report($"《{job.CourseName}》平时测试已全部安全完成！");
-        });
+        }).ToDictionary(item => item.Job.Id);
+        if (work.Values.Any(item => item.Account == null))
+        {
+            ErrorMessage = "课程缺少所属账号，请重新同步课程。";
+            return;
+        }
+        await _taskService.EnqueueBatchJobsAsync(work.Values.Select(item => item.Job),
+            (job, token, progress, step) =>
+            {
+                var item = work[job.Id];
+                return _backend.RunCourseAsync(item.Account!, item.Course, feature, progress, step, token);
+            });
+        SuccessMessage = $"已加入 {work.Count} 个任务，请在任务监控查看进度。";
     }
 }
