@@ -17,4 +17,15 @@
     <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\backend\**\*.py;..\..\backend\**\*.ts;..\..\backend\**\*.json;..\..\backend\**\*.yaml;..\..\backend\**\*.txt;..\..\backend\**\LICENSE;..\..\backend\**\NOTICE.md"
+             Exclude="..\..\backend\tests\**;..\..\backend\.venv\**;..\..\backend\venv\**;..\..\backend\**\node_modules\**;..\..\backend\**\__pycache__\**;..\..\backend\config.json;..\..\backend\cookies*.json;..\..\backend\daily_limit.json;..\..\backend\work\**;..\..\backend\.sessions\**;..\..\backend\**\dist\**;..\..\backend\AiDownloadCache\**;..\..\backend\aiexamAnswer\**;..\..\backend\integrations\ketangpai\config.ts"
+             Link="backend\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\scripts\Setup-Backend.ps1" Link="scripts\Setup-Backend.ps1"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\BACKEND.md" Link="BACKEND.md"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,8 @@
 # FuckRubbishClass
 
+已迁入智慧树/知到、学习通和课堂派后端，采用 C# WPF + Python Adapter + TypeScript/Node sidecar。
+安装运行、当前功能范围及验证方式见 [后端接入说明](BACKEND.md)。下文包含界面与架构设计目标，实际接入范围以上述说明为准。
+
 > 现代化统一在线课程自动化与辅助学习工作台（Fluent Design Edition）
 
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0--windows-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)

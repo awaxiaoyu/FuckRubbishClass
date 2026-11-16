@@ -28,3 +28,20 @@ _ReSharper*/
 ## Data & Local outputs
 data/
 *.log
+
+## Backend dependencies and private runtime state
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+dist/
+.sessions/
+backend/config.json
+backend/cookies*.json*
+backend/daily_limit.json
+backend/work/
+backend/AiDownloadCache/
+backend/aiexamAnswer/
+backend/integrations/ketangpai/config.ts
+artifacts/

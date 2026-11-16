@@ -17,6 +17,7 @@ public interface ITaskExecutionService
     
     TaskJobModel? CurrentRunningJob { get; }
     int MaxConcurrency { get; set; }
+    int StaggerDelayMs { get; set; }
     int ActiveWorkerCount { get; }
     
     void Log(LogLevel level, string source, string message);
@@ -32,7 +33,7 @@ public class TaskExecutionService : ITaskExecutionService
 {
     private readonly ILoggerService _logger;
     private readonly IEventBus _eventBus;
-    private readonly SemaphoreSlim _concurrencySemaphore;
+    private SemaphoreSlim _concurrencySemaphore = new(3, 8);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _accountLocks = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _jobCancellations = new();
     private int _workerIdCounter;
@@ -44,14 +45,27 @@ public class TaskExecutionService : ITaskExecutionService
     public ObservableCollection<LogEntry> Logs => _logger.LiveLogs;
     public TaskJobModel? CurrentRunningJob => RunningJobs.FirstOrDefault();
 
-    public int MaxConcurrency { get; set; } = 3;
+    private int _maxConcurrency = 3;
+    public int MaxConcurrency
+    {
+        get => _maxConcurrency;
+        set
+        {
+            var capacity = Math.Clamp(value, 1, 8);
+            if (capacity == _maxConcurrency) return;
+            if (!_jobCancellations.IsEmpty) throw new InvalidOperationException("请等待当前任务结束后修改并发数。");
+            _concurrencySemaphore.Dispose();
+            _concurrencySemaphore = new SemaphoreSlim(capacity, 8);
+            _maxConcurrency = capacity;
+        }
+    }
     public int ActiveWorkerCount => RunningJobs.Count;
+    public int StaggerDelayMs { get; set; }
 
     public TaskExecutionService(ILoggerService? logger = null, IEventBus? eventBus = null)
     {
         _logger = logger ?? AppLogger.Instance;
         _eventBus = eventBus ?? AppEventBus.Instance;
-        _concurrencySemaphore = new SemaphoreSlim(MaxConcurrency, 8);
 
         _logger.Info("任务引擎", $"跨平台多账号多线程并发引擎已初始化 (最大全局并发度: {MaxConcurrency})。");
     }
@@ -71,8 +85,11 @@ public class TaskExecutionService : ITaskExecutionService
         var jobList = jobs.ToList();
         if (jobList.Count == 0) return;
 
+        var position = 0;
         foreach (var job in jobList)
         {
+            if (!_jobCancellations.TryAdd(job.Id, new CancellationTokenSource()))
+                throw new InvalidOperationException("同一个任务不能重复入队。");
             job.Status = TaskExecutionStatus.Queued;
             job.CurrentStep = "在并发调度队列中等待…";
 
@@ -85,7 +102,8 @@ public class TaskExecutionService : ITaskExecutionService
             _logger.Info("并发调度", $"[排队] 任务已加入待执行队列: [{job.PlatformDisplayName}] [{job.AccountName}] {job.Title}");
             
             // 异步后台启动工作单元，由 Semaphore 控制真正进入并发执行的时间点
-            _ = Task.Run(() => ExecuteWorkerPipelineAsync(job, workerFactory));
+            var startDelay = position++ * Math.Max(0, StaggerDelayMs);
+            _ = Task.Run(() => ExecuteWorkerPipelineAsync(job, workerFactory, startDelay));
         }
 
         await Task.CompletedTask;
@@ -93,22 +111,27 @@ public class TaskExecutionService : ITaskExecutionService
 
     private async Task ExecuteWorkerPipelineAsync(
         TaskJobModel job,
-        Func<TaskJobModel, CancellationToken, IProgress<double>, IProgress<string>, Task> workerFactory)
+        Func<TaskJobModel, CancellationToken, IProgress<double>, IProgress<string>, Task> workerFactory,
+        int startDelay)
     {
-        var cts = new CancellationTokenSource();
-        _jobCancellations[job.Id] = cts;
+        var cts = _jobCancellations[job.Id];
+        var accountAcquired = false;
+        var slotAcquired = false;
 
         // 单账号并发锁 (避免同一账号同时打开多路视频流被网课平台风控判定多端异常学习)
-        var accountKey = string.IsNullOrWhiteSpace(job.AccountId) ? job.AccountName : job.AccountId;
+        var accountKey = $"{job.Platform}:{(string.IsNullOrWhiteSpace(job.AccountId) ? job.AccountName : job.AccountId)}";
         var accountLock = _accountLocks.GetOrAdd(accountKey, _ => new SemaphoreSlim(1, 1));
 
         try
         {
+            if (startDelay > 0) await Task.Delay(startDelay, cts.Token);
             // 1. 等待单账号排队锁
             await accountLock.WaitAsync(cts.Token);
+            accountAcquired = true;
 
             // 2. 等待全局并发槽位
             await _concurrencySemaphore.WaitAsync(cts.Token);
+            slotAcquired = true;
 
             var workerTag = $"Worker-{Interlocked.Increment(ref _workerIdCounter)}";
             job.WorkerThreadTag = workerTag;
@@ -127,25 +150,32 @@ public class TaskExecutionService : ITaskExecutionService
 
             var progressGauge = new Progress<double>(p =>
             {
-                job.ProgressPercent = p;
-                _eventBus.Publish(new TaskJobProgressEvent(job.Id, p, job.CurrentStep));
+                DispatchToUi(() =>
+                {
+                    if (job.Status != TaskExecutionStatus.Running) return;
+                    job.ProgressPercent = p;
+                    _eventBus.Publish(new TaskJobProgressEvent(job.Id, p, job.CurrentStep));
+                });
             });
 
             var stepReporter = new Progress<string>(s =>
             {
-                job.CurrentStep = s;
+                DispatchToUi(() =>
+                {
+                    if (job.Status == TaskExecutionStatus.Running) job.CurrentStep = s;
+                });
                 _logger.Info($"[{job.AccountName}]", s);
                 _eventBus.Publish(new TaskJobProgressEvent(job.Id, job.ProgressPercent, s));
             });
 
             // 执行真正的刷课/作答作业
             await workerFactory(job, cts.Token, progressGauge, stepReporter);
+            cts.Token.ThrowIfCancellationRequested();
 
             job.Status = TaskExecutionStatus.Completed;
             job.ProgressPercent = 100;
-            job.CurrentStep = "学习达标已完成";
+            job.CurrentStep = "后端任务处理结束";
             _logger.Success(workerTag, $"✅ [{job.AccountName}] 《{job.CourseName}》并发任务执行完毕！");
-            _eventBus.Publish(new TaskJobCompletedEvent(job, true));
         }
         catch (OperationCanceledException)
         {
@@ -153,7 +183,6 @@ public class TaskExecutionService : ITaskExecutionService
             job.CurrentStep = "用户已手动停止";
             _logger.Warn(job.WorkerThreadTag, $"⏹ [{job.AccountName}] 《{job.CourseName}》任务已终止。");
             _eventBus.Publish(new TaskJobCancelledEvent(job.Id));
-            _eventBus.Publish(new TaskJobCompletedEvent(job, false, "用户取消"));
         }
         catch (Exception ex)
         {
@@ -161,12 +190,10 @@ public class TaskExecutionService : ITaskExecutionService
             job.ErrorMessage = ex.Message;
             job.CurrentStep = $"异常: {ex.Message}";
             _logger.Error(job.WorkerThreadTag, $"❌ [{job.AccountName}] 《{job.CourseName}》任务异常终止: {ex.Message}", ex);
-            _eventBus.Publish(new TaskJobCompletedEvent(job, false, ex.Message));
         }
         finally
         {
             // 归还槽位与清理资源
-            _jobCancellations.TryRemove(job.Id, out _);
 
             DispatchToUi(() =>
             {
@@ -175,17 +202,11 @@ public class TaskExecutionService : ITaskExecutionService
                 if (!FinishedJobs.Contains(job)) FinishedJobs.Insert(0, job);
             });
 
-            try
-            {
-                _concurrencySemaphore.Release();
-            }
-            catch { }
-
-            try
-            {
-                accountLock.Release();
-            }
-            catch { }
+            if (slotAcquired) _concurrencySemaphore.Release();
+            if (accountAcquired) accountLock.Release();
+            _jobCancellations.TryRemove(job.Id, out _);
+            cts.Dispose();
+            _eventBus.Publish(new TaskJobCompletedEvent(job, job.Status == TaskExecutionStatus.Completed, job.ErrorMessage));
         }
     }
 
@@ -193,7 +214,8 @@ public class TaskExecutionService : ITaskExecutionService
     {
         if (_jobCancellations.TryGetValue(jobId, out var cts))
         {
-            cts.Cancel();
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { return; }
             _logger.Warn("任务调度", $"已发出终止指令给任务 ID: {jobId}");
         }
         else
@@ -226,23 +248,14 @@ public class TaskExecutionService : ITaskExecutionService
             catch { }
         }
 
-        DispatchToUi(() =>
-        {
-            foreach (var pending in PendingJobs.ToList())
-            {
-                pending.Status = TaskExecutionStatus.Cancelled;
-                pending.CurrentStep = "排队任务被批量取消";
-                FinishedJobs.Insert(0, pending);
-            }
-            PendingJobs.Clear();
-        });
     }
 
     private static void DispatchToUi(Action action)
     {
         if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
         {
-            Application.Current.Dispatcher.InvokeAsync(action);
+            if (!Application.Current.Dispatcher.HasShutdownStarted)
+                Application.Current.Dispatcher.Invoke(action);
         }
         else
         {

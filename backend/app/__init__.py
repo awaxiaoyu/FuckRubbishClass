@@ -1,0 +1,1 @@
+"""Desktop aggregation application package."""

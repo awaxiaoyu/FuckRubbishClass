@@ -93,29 +93,8 @@ public class SettingsService : ISettingsService
             // Fallback to defaults
         }
 
-        SeedDefaultSignInSchedules();
-        await SaveSettingsAsync();
-    }
-
-    private void SeedDefaultSignInSchedules()
-    {
         SignInConfig.Schedules.Clear();
-        SignInConfig.Schedules.Add(new SignInScheduleItem
-        {
-            CourseName = "计算机网络原理",
-            ClassId = "KTP889102",
-            DayOfWeek = 2, // 星期二
-            StartTime = "08:00",
-            EndTime = "09:40"
-        });
-        SignInConfig.Schedules.Add(new SignInScheduleItem
-        {
-            CourseName = "软件工程",
-            ClassId = "KTP992144",
-            DayOfWeek = 4, // 星期四
-            StartTime = "14:00",
-            EndTime = "15:40"
-        });
+        await SaveSettingsAsync();
     }
 
     private static void CopyProps<T>(T source, T target)

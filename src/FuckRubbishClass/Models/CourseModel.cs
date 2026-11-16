@@ -54,7 +54,6 @@ public partial class CourseModel : ObservableObject
     [ObservableProperty]
     private string _coverColor = "#2563EB";
 
-    [JsonIgnore]
     public JsonElement? RawMetadata { get; set; }
 
     [JsonIgnore]

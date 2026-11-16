@@ -7,7 +7,7 @@ using FuckRubbishClass.Services;
 
 namespace FuckRubbishClass.ViewModels;
 
-public partial class MainViewModel : ViewModelBase
+public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly ILoggerService _logger;
     private readonly IEventBus _eventBus;
@@ -16,7 +16,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly IModelSchedulerService _schedulerService;
     private readonly ISettingsService _settingsService;
     private readonly ITaskExecutionService _taskService;
-    private readonly IPythonBridgeService _bridgeService;
+    private readonly IPlatformBackendService _backendService;
 
     public DashboardViewModel DashboardVM { get; }
     public AccountsViewModel AccountsVM { get; }
@@ -45,7 +45,7 @@ public partial class MainViewModel : ViewModelBase
     private bool _hasActiveTask;
 
     [ObservableProperty]
-    private string _bridgeStatusText = "Bridge 运行中 (本地集成)";
+    private string _bridgeStatusText = "后端尚未检查";
 
     public MainViewModel()
     {
@@ -54,18 +54,18 @@ public partial class MainViewModel : ViewModelBase
         _eventBus = AppEventBus.Instance;
 
         // 2. 初始化服务层
-        _accountService = new AccountService(logger: _logger, eventBus: _eventBus);
-        _courseService = new CourseService(logger: _logger, eventBus: _eventBus);
         _schedulerService = new ModelSchedulerService(logger: _logger, eventBus: _eventBus);
         _settingsService = new SettingsService(logger: _logger, eventBus: _eventBus);
+        _backendService = new PlatformBackendService(_settingsService, _schedulerService, _logger);
+        _accountService = new AccountService(_backendService, logger: _logger, eventBus: _eventBus);
+        _courseService = new CourseService(_accountService, _backendService, logger: _logger, eventBus: _eventBus);
         _taskService = new TaskExecutionService(_logger, _eventBus);
-        _bridgeService = new PythonBridgeService(_logger);
 
         // 3. 初始化 ViewModels
         DashboardVM = new DashboardViewModel(_accountService, _courseService, _schedulerService, _taskService, _eventBus);
-        AccountsVM = new AccountsViewModel(_accountService, _taskService);
-        CourseHubVM = new CourseHubViewModel(_courseService, _taskService, _accountService);
-        FeaturesVM = new FeaturesViewModel(_settingsService, _taskService, _accountService, _courseService, _schedulerService);
+        AccountsVM = new AccountsViewModel(_accountService, _taskService, _backendService, _courseService);
+        CourseHubVM = new CourseHubViewModel(_courseService, _taskService, _accountService, _backendService);
+        FeaturesVM = new FeaturesViewModel(_settingsService, _taskService, _accountService, _courseService, _backendService);
         ModelCenterVM = new ModelCenterViewModel(_schedulerService, _taskService);
         TaskMonitorVM = new TaskMonitorViewModel(_taskService, _logger, _eventBus);
         SettingsVM = new SettingsViewModel(_settingsService, _taskService);
@@ -116,10 +116,17 @@ public partial class MainViewModel : ViewModelBase
             await _courseService.LoadCoursesAsync();
             await _schedulerService.LoadConfigAsync();
 
-            var bridgeConnected = await _bridgeService.EnsureConnectedAsync();
-            BridgeStatusText = bridgeConnected ? "Python Bridge: 在线" : "本地原生模式";
+            _taskService.MaxConcurrency = _settingsService.AppSettings.EnableConcurrentDispatch
+                ? _settingsService.AppSettings.MaxConcurrentTasks : 1;
+            _taskService.StaggerDelayMs = _settingsService.AppSettings.StaggerDelayMs;
+            _settingsService.AppSettings.MaxConcurrentPerAccount = 1;
+            _settingsService.SignInConfig.IsServiceRunning = false;
+            AccountsVM.SelectedAccount = _accountService.ActiveAccount;
+            var bridgeConnected = await _backendService.CheckAvailableAsync();
+            BridgeStatusText = bridgeConnected ? "Python 后端：就绪（按账号启动）" : "后端不可用，请查看日志";
 
-            _logger.Success("系统", "FuckRubbishClass 工作台加载完毕，所有服务与事件总线就绪。");
+            if (bridgeConnected) _logger.Success("系统", "工作台加载完毕，平台后端已就绪。");
+            else _logger.Warn("系统", "工作台已加载，平台后端尚不可用，请查看 Bridge 日志。");
         }
         catch (Exception ex)
         {
@@ -179,5 +186,14 @@ public partial class MainViewModel : ViewModelBase
         {
             TaskStatusSummary = "空闲就绪 (并发多线程引擎已待命)";
         }
+    }
+
+    public void Dispose()
+    {
+        AccountsVM.CancelLogin();
+        FeaturesVM.CancelPendingOperation();
+        _taskService.CancelAllJobs();
+        _backendService.Dispose();
+        _eventBus.UnsubscribeAll(this);
     }
 }

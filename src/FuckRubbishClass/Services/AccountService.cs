@@ -24,14 +24,16 @@ public class AccountService : IAccountService
     private readonly string _filePath;
     private readonly ILoggerService _logger;
     private readonly IEventBus _eventBus;
+    private readonly IPlatformBackendService _backend;
 
     public ObservableCollection<AccountModel> Accounts { get; } = new();
     public AccountModel? ActiveAccount { get; set; }
 
-    public AccountService(string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
+    public AccountService(IPlatformBackendService backend, string? dataDir = null, ILoggerService? logger = null, IEventBus? eventBus = null)
     {
         _logger = logger ?? AppLogger.Instance;
         _eventBus = eventBus ?? AppEventBus.Instance;
+        _backend = backend;
 
         var dir = dataDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         Directory.CreateDirectory(dir);
@@ -51,6 +53,8 @@ public class AccountService : IAccountService
                     Accounts.Clear();
                     foreach (var acc in loaded)
                     {
+                        acc.Status = AccountStatus.NeedLogin;
+                        acc.StatusDescription = "会话尚未验证，请刷新会话或登录";
                         Accounts.Add(acc);
                     }
                     ActiveAccount = Accounts.FirstOrDefault(x => x.IsPrimary) ?? Accounts.FirstOrDefault();
@@ -61,56 +65,10 @@ public class AccountService : IAccountService
         }
         catch (Exception ex)
         {
-            _logger.Warn("账号中心", $"读取账号文件失败，将载入初始预设: {ex.Message}");
+            _logger.Warn("账号中心", $"读取账号文件失败: {ex.Message}");
         }
 
-        SeedDefaultAccounts();
-        await SaveAccountsAsync();
-    }
-
-    private void SeedDefaultAccounts()
-    {
         Accounts.Clear();
-        Accounts.Add(new AccountModel
-        {
-            Platform = PlatformType.Zhihuishu,
-            Username = "13800138000",
-            DisplayName = "小宇同学",
-            School = "厦门大学",
-            Status = AccountStatus.Active,
-            StatusDescription = "会话活跃 (Cookie已同步)",
-            IsPrimary = true,
-            CourseCount = 4,
-            LastActiveTime = DateTime.Now.AddMinutes(-12)
-        });
-
-        Accounts.Add(new AccountModel
-        {
-            Platform = PlatformType.Chaoxing,
-            Username = "20230910088",
-            DisplayName = "xiaoyu_cx",
-            School = "厦门大学",
-            Status = AccountStatus.Active,
-            StatusDescription = "会话活跃 (Edge托管中)",
-            IsPrimary = true,
-            CourseCount = 3,
-            LastActiveTime = DateTime.Now.AddMinutes(-35)
-        });
-
-        Accounts.Add(new AccountModel
-        {
-            Platform = PlatformType.Ketangpai,
-            Username = "13800138000",
-            DisplayName = "课堂派自动签到",
-            School = "计算机学院",
-            Status = AccountStatus.Active,
-            StatusDescription = "监听服务运行中",
-            IsPrimary = true,
-            CourseCount = 2,
-            LastActiveTime = DateTime.Now.AddMinutes(-5)
-        });
-
-        ActiveAccount = Accounts.FirstOrDefault();
     }
 
     public async Task SaveAccountsAsync()
@@ -151,6 +109,7 @@ public class AccountService : IAccountService
         var acc = Accounts.FirstOrDefault(x => x.Id == accountId);
         if (acc != null)
         {
+            _backend.ReleaseAccount(accountId);
             Accounts.Remove(acc);
             if (ActiveAccount?.Id == accountId)
             {
@@ -193,14 +152,26 @@ public class AccountService : IAccountService
         target.StatusDescription = "检查会话状态中…";
         _eventBus.Publish(new AccountStateChangedEvent(target, "正在刷新会话"));
 
-        await Task.Delay(1000); // Simulate check
-        target.Status = AccountStatus.Active;
-        target.StatusDescription = $"会话正常 (刷新于 {DateTime.Now:HH:mm:ss})";
-        target.LastActiveTime = DateTime.Now;
-        await SaveAccountsAsync();
-
-        _logger.Success("账号中心", $"会话刷新成功: {target.DisplayTitle}");
-        _eventBus.Publish(new AccountStateChangedEvent(target, "会话正常"));
-        return true;
+        try
+        {
+            var courses = await _backend.GetCoursesAsync(target);
+            target.CourseCount = courses.Count;
+            target.Status = AccountStatus.Active;
+            target.StatusDescription = $"平台会话已验证 ({DateTime.Now:HH:mm:ss})";
+            target.LastActiveTime = DateTime.Now;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            target.Status = AccountStatus.NeedLogin;
+            target.StatusDescription = ex.Message;
+            _logger.Warn("账号中心", $"会话检查失败: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            await SaveAccountsAsync();
+            _eventBus.Publish(new AccountStateChangedEvent(target, target.StatusDescription));
+        }
     }
 }
