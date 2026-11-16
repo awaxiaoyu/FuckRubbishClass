@@ -25,6 +25,9 @@ DeepReasoning 传给学习通题面解析，DocumentParser 传给知到课件处
 需要 Windows、.NET 8+ SDK、Python 3.10+；课堂派另需 Node.js 18+、pnpm。
 安装脚本默认访问 PyPI 与 npm registry；-Offline 仅使用本地可用依赖。
 
+桌面应用可在“设置 → 后端运行环境”点击“安装 Python 后端依赖”，自动创建 backend/.venv 并安装 Python 依赖。
+该操作要求系统已安装 Python 3.10+ 且可从 PATH 找到；课堂派 Node 依赖仍在“功能 → 考勤与签到”单独安装。
+
 ```powershell
 .\scripts\Setup-Backend.ps1 -Python 'D:\Python\python.exe'
 dotnet run --project .\src\FuckRubbishClass\FuckRubbishClass.csproj
