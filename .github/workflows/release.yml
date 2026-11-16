@@ -1,0 +1,64 @@
+name: Build and publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example v0.1.0)
+        required: true
+        default: v0.1.0
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish self-contained Windows x64 app
+        run: >-
+          dotnet publish .\src\FuckRubbishClass\FuckRubbishClass.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output .\artifacts\publish
+
+      - name: Package release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Invalid release tag: $env:RELEASE_TAG"
+          }
+
+          $archivePath = Join-Path $PWD "artifacts\FuckRubbishClass-$env:RELEASE_TAG-win-x64.zip"
+          Compress-Archive -Path ".\artifacts\publish\*" -DestinationPath $archivePath -CompressionLevel Optimal
+          "RELEASE_ASSET=$archivePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $notes = @"
+          Windows x64 build created by GitHub Actions. The .NET runtime is bundled.
+
+          Before using platform backends, install Python 3.10+ and run `scripts\Setup-Backend.ps1` from the extracted folder. For Ketangpai, install Node.js 18+ and pnpm first. To use only Zhihuishu/Zhidao and Chaoxing, run `scripts\Setup-Backend.ps1 -SkipKetangpai`.
+          "@
+
+          gh release create "$env:RELEASE_TAG" "$env:RELEASE_ASSET" `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --target "$env:GITHUB_SHA" `
+            --title "FuckRubbishClass $env:RELEASE_TAG" `
+            --notes $notes
