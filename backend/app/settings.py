@@ -167,7 +167,7 @@ def validate_chaoxing(value: dict) -> None:
         if type(value.get(key)) is not bool:
             raise ValueError("学习通开关需为布尔值")
     _number(value["login_timeout"], "学习通登录等待（秒）", 30, 1800, integer=True)
-    _number(value["playback_rate"], "学习通播放速度", 0.5, 2)
+    _number(value["playback_rate"], "学习通播放速度", 0.5)
     _number(value["stall_timeout"], "学习通无进展等待（秒）", 30, 1800, integer=True)
     validate_exam_assist(value.get("exam_assist", DEFAULT_EXAM_ASSIST))
     validate_exam_auto(value.get("exam_auto", DEFAULT_EXAM_AUTO))

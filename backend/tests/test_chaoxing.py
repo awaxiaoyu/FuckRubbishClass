@@ -123,8 +123,10 @@ class ChaoxingTests(unittest.TestCase):
         values["chaoxing"]["future"] = "retained"
         saved = self.store.save(values)
         self.assertEqual(saved["chaoxing"]["future"], "retained")
+        saved = self.store.save({"chaoxing": {"playback_rate": 99}})
+        self.assertEqual(saved["chaoxing"]["playback_rate"], 99)
         before = self.store.path.read_bytes()
-        for changes in ({"browser": "bad"}, {"playback_rate": 99}, {"login_timeout": 0}, {"muted": "true"}):
+        for changes in ({"browser": "bad"}, {"playback_rate": 0.4}, {"login_timeout": 0}, {"muted": "true"}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 self.store.save({"chaoxing": changes})
             self.assertEqual(self.store.path.read_bytes(), before)
