@@ -122,7 +122,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _settingsService.AppSettings.MaxConcurrentPerAccount = 1;
             _settingsService.SignInConfig.IsServiceRunning = false;
             AccountsVM.SelectedAccount = _accountService.ActiveAccount;
+            var dependencyCheck = SettingsVM.CheckPythonBackendDependenciesAsync();
             var bridgeConnected = await _backendService.CheckAvailableAsync();
+            await dependencyCheck;
             BridgeStatusText = bridgeConnected ? "Python 后端：就绪（按账号启动）" : "后端不可用，请查看日志";
 
             if (bridgeConnected) _logger.Success("系统", "工作台加载完毕，平台后端已就绪。");

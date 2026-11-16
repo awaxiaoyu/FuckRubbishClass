@@ -168,6 +168,37 @@ internal static class Program
         await Idle();
         Check(bindings.Errors.Count == 0, "WPF binding errors: " + string.Join(Environment.NewLine, bindings.Errors));
         Console.WriteLine("PASS: frontend error recovery and no WPF binding errors");
+
+        var setup = new FixtureBackendSetup();
+        var settingsVm = new SettingsViewModel(settings, tasks, setup);
+        var settingsView = new SettingsView { DataContext = settingsVm };
+        Check(settingsView.FindName("InstallBackendDependenciesButton") is Button,
+            "Python backend dependency install button is missing");
+        var setupPanel = (Border)settingsView.FindName("BackendSetupPanel");
+        Render(new Border { Background = Brushes.WhiteSmoke, Padding = new Thickness(24), Child = settingsView },
+            Path.Combine(output, "settings.png"));
+        Check(setupPanel.Visibility == Visibility.Collapsed, "Backend setup panel showed before startup dependency check");
+        await settingsVm.CheckPythonBackendDependenciesAsync();
+        await Idle();
+        Check(setupPanel.Visibility == Visibility.Visible, "Missing Python dependencies did not show the install panel");
+        await settingsVm.InstallBackendDependenciesCommand.ExecuteAsync(null);
+        await Idle();
+        Check(setup.Called && settingsVm.SuccessMessage?.Contains("Python 后端依赖已安装") == true &&
+            setupPanel.Visibility == Visibility.Collapsed,
+            "Python backend dependency install command did not complete");
+
+        var installedSetup = new FixtureBackendSetup(installed: true);
+        var installedSettingsVm = new SettingsViewModel(settings, tasks, installedSetup);
+        var installedSettingsView = new SettingsView { DataContext = installedSettingsVm };
+        var installedSetupPanel = (Border)installedSettingsView.FindName("BackendSetupPanel");
+        await installedSettingsVm.CheckPythonBackendDependenciesAsync();
+        Render(new Border { Background = Brushes.WhiteSmoke, Padding = new Thickness(24), Child = installedSettingsView },
+            Path.Combine(output, "settings-installed.png"));
+        Check(installedSetupPanel.Visibility == Visibility.Collapsed,
+            "Backend setup panel remained visible when dependencies were already installed at startup");
+        Check(bindings.Errors.Count == 0, "WPF binding errors: " + string.Join(Environment.NewLine, bindings.Errors));
+        Console.WriteLine("PASS: Python backend setup button is wired and reports completion");
+
         Console.WriteLine("Screenshots: " + output);
     }
 
@@ -236,6 +267,26 @@ internal sealed class FixtureBackend : IPlatformBackendService
         IProgress<double> progress, IProgress<string> step, CancellationToken token) => Task.CompletedTask;
     public void ReleaseAccount(string accountId) { }
     public void Dispose() { }
+}
+
+internal sealed class FixtureBackendSetup : IBackendSetupService
+{
+    public bool Called { get; private set; }
+    private bool _ready;
+
+    public FixtureBackendSetup(bool installed = false) => _ready = installed;
+
+    public Task<bool> ArePythonDependenciesInstalledAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(_ready);
+
+    public Task InstallPythonDependenciesAsync(Action<string>? reportProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        Called = true;
+        _ready = true;
+        reportProgress?.Invoke("测试安装已完成");
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class UiLogger : ILoggerService

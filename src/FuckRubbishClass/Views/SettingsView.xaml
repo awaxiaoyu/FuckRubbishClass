@@ -39,6 +39,31 @@
                     </StackPanel>
                 </Border>
 
+                <Border x:Name="BackendSetupPanel" Style="{StaticResource FluentCardElevatedStyle}" Margin="0,0,0,18"
+                        Visibility="{Binding ShowBackendSetupPanel, Converter={StaticResource BoolToVisConverter}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="后端运行环境" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="安装 Python 3.10+ 后，点击此处创建项目虚拟环境并安装 Python 后端依赖。需要联网；课堂派 Node 依赖在考勤页面单独安装。"
+                                       Style="{StaticResource SubheaderTextStyle}" TextWrapping="Wrap" Margin="0,4,16,0" />
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
+                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisConverter}}">
+                                <ProgressBar Width="120" Height="4" IsIndeterminate="True" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <TextBlock Text="{Binding BusyMessage}" Foreground="#475569" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="#B91C1C" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource StringNullOrEmptyToVisConverter}}" />
+                        </StackPanel>
+                        <ui:Button x:Name="InstallBackendDependenciesButton" Grid.Column="1" Appearance="Primary"
+                                   Content="安装 Python 后端依赖" Command="{Binding InstallBackendDependenciesCommand}"
+                                   VerticalAlignment="Center" Padding="16,10" />
+                    </Grid>
+                </Border>
+
                 <!-- SECTION 0: Concurrency Settings -->
                 <Border Style="{StaticResource FluentCardElevatedStyle}" Margin="0,0,0,18">
                     <StackPanel>
